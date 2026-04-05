@@ -1,154 +1,126 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import SubmissionForm from '@/components/SubmissionForm';
 import { Class, Project } from '@/types';
 
 export default function SubmitPage() {
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [selectedClass, setSelectedClass] = useState('');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState('');
+  return (
+    <Suspense fallback={<p className="text-gray-500">Loading...</p>}>
+      <SubmitContent />
+    </Suspense>
+  );
+}
+
+function SubmitContent() {
+  const searchParams = useSearchParams();
+  const classIdParam = searchParams.get('classId');
+  const projectIdParam = searchParams.get('projectId');
+
+  const [cls, setCls] = useState<Class | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
-    async function loadClasses() {
+    async function load() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: memberships } = await supabase
-        .from('class_members')
-        .select('class_id, classes(*)')
-        .eq('student_id', user.id);
-
-      if (memberships) {
-        const cls = memberships
-          .map((m) => m.classes as unknown as Class)
-          .filter(Boolean);
-        setClasses(cls);
-        if (cls.length === 1) {
-          setSelectedClass(cls[0].id);
-        }
+      if (!classIdParam) {
+        setLoading(false);
+        return;
       }
+
+      const { data: membership } = await supabase
+        .from('class_members')
+        .select('id')
+        .eq('student_id', user.id)
+        .eq('class_id', classIdParam)
+        .single();
+
+      if (!membership) {
+        setLoading(false);
+        return;
+      }
+      setAuthorized(true);
+
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('id', classIdParam)
+        .single();
+      setCls(classData);
+
+      if (projectIdParam) {
+        const { data: projData } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectIdParam)
+          .single();
+        setProject(projData);
+      }
+
       setLoading(false);
     }
-    loadClasses();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [classIdParam, projectIdParam]);
 
-  useEffect(() => {
-    if (!selectedClass) {
-      setProjects([]);
-      setSelectedProject('');
-      return;
-    }
-    async function loadProjects() {
-      const res = await fetch(`/api/projects?classId=${selectedClass}`);
-      const data = await res.json();
-      setProjects(data || []);
-      setSelectedProject('');
-    }
-    loadProjects();
-  }, [selectedClass]);
+  if (loading) return <p className="text-gray-500">Loading...</p>;
 
-  if (loading) {
-    return <p className="text-gray-500">Loading...</p>;
-  }
-
-  if (classes.length === 0) {
+  if (!classIdParam || !authorized) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-bold mb-2">No Class Joined</h2>
+        <h2 className="text-xl font-bold mb-2">No Class Selected</h2>
         <p className="text-gray-500 mb-4">
-          Join a class first using the invite code from your teacher.
+          Go to your class page and select a project to submit.
         </p>
-        <a
+        <Link
           href="/student/dashboard"
           className="text-blue-600 hover:underline text-sm"
         >
           Go to Dashboard
-        </a>
+        </Link>
       </div>
     );
   }
 
-  const selectedProjectData = projects.find((p) => p.id === selectedProject);
-
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">New Submission</h1>
+      <Link
+        href={`/student/class/${classIdParam}`}
+        className="text-sm text-gray-500 hover:text-gray-700"
+      >
+        &larr; Back to {cls?.class_name || 'class'}
+      </Link>
 
-      {/* Class selection */}
-      {classes.length > 1 && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select Class
-          </label>
-          <select
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          >
-            <option value="">Choose a class</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.class_name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <h1 className="text-2xl font-bold mt-2 mb-2">New Submission</h1>
 
-      {/* Project selection */}
-      {selectedClass && projects.length > 0 && (
+      {project && (
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Project
-          </label>
-          <div className="space-y-2">
-            {projects.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setSelectedProject(p.id)}
-                className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                  selectedProject === p.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <span className="text-sm font-medium">{p.project_name}</span>
-                {p.description && (
-                  <p className="text-xs text-gray-500 mt-1">{p.description}</p>
-                )}
-              </button>
-            ))}
-          </div>
+          <span className="text-sm text-gray-500">
+            Project: <span className="font-medium text-gray-700">{project.project_name}</span>
+          </span>
+          {project.description && (
+            <div className="mt-2 bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <p className="text-xs text-blue-600 font-medium mb-1">Writing Prompt</p>
+              <p className="text-sm text-gray-700">{project.description}</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Show prompt if project selected */}
-      {selectedProjectData?.description && (
-        <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
-          <p className="text-xs text-blue-600 font-medium mb-1">Writing Prompt</p>
-          <p className="text-sm text-gray-700">{selectedProjectData.description}</p>
-        </div>
-      )}
-
-      {/* Form */}
-      {selectedClass && (projects.length === 0 || selectedProject) ? (
-        <SubmissionForm
-          classId={selectedClass}
-          projectId={selectedProject || undefined}
-        />
-      ) : selectedClass && projects.length > 0 && !selectedProject ? (
-        <p className="text-gray-500 text-sm">Please select a project first</p>
-      ) : (
-        <p className="text-gray-500 text-sm">Please select a class first</p>
-      )}
+      <SubmissionForm
+        classId={classIdParam}
+        projectId={projectIdParam || undefined}
+      />
     </div>
   );
 }

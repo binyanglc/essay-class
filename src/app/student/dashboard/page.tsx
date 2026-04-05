@@ -11,9 +11,7 @@ export default function StudentDashboard() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [recentSubs, setRecentSubs] = useState<Submission[]>([]);
   const [topErrors, setTopErrors] = useState<ErrorFrequency[]>([]);
-  const [joinCode, setJoinCode] = useState('');
-  const [joinError, setJoinError] = useState('');
-  const [joinSuccess, setJoinSuccess] = useState('');
+  const [subCounts, setSubCounts] = useState<Record<string, number>>({});
   const supabase = createClient();
 
   useEffect(() => {
@@ -44,6 +42,17 @@ export default function StudentDashboard() {
         .map((m) => m.classes as unknown as Class)
         .filter(Boolean);
       setClasses(cls);
+
+      const counts: Record<string, number> = {};
+      for (const c of cls) {
+        const { count } = await supabase
+          .from('submissions')
+          .select('id', { count: 'exact', head: true })
+          .eq('student_id', user.id)
+          .eq('class_id', c.id);
+        counts[c.id] = count || 0;
+      }
+      setSubCounts(counts);
     }
 
     const { data: subs } = await supabase
@@ -51,125 +60,62 @@ export default function StudentDashboard() {
       .select('*')
       .eq('student_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(5);
+      .limit(3);
     setRecentSubs(subs || []);
 
     const errors = await getStudentErrorHistory(supabase, user.id);
     setTopErrors(errors.slice(0, 5));
   }
 
-  const handleJoinClass = async () => {
-    if (!joinCode.trim()) return;
-    setJoinError('');
-    setJoinSuccess('');
-
-    const res = await fetch('/api/classes/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inviteCode: joinCode }),
-    });
-
-    const data = await res.json();
-    if (data.success || data.class) {
-      setJoinSuccess(`Joined: ${data.class.class_name}`);
-      setJoinCode('');
-      loadData();
-    } else {
-      setJoinError(data.error || 'Failed to join');
-    }
-  };
-
   const hasClasses = classes.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <h1 className="text-2xl font-bold">
-          {profile?.name && profile.name !== 'Guest'
-            ? `Hi, ${profile.name}`
-            : 'Dashboard'}
-        </h1>
-        {hasClasses && (
-          <Link
-            href="/student/submit"
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
-          >
-            New Submission
-          </Link>
-        )}
-      </div>
+      <h1 className="text-2xl font-bold">
+        {profile?.name && profile.name !== 'Guest'
+          ? `Hi, ${profile.name}`
+          : 'Dashboard'}
+      </h1>
 
-      {/* No class yet — prominent join section */}
+      {/* No class — prompt to join */}
       {!hasClasses && (
         <section className="bg-white rounded-xl border-2 border-blue-200 p-6 text-center">
-          <h2 className="font-semibold text-lg mb-2">Welcome! Join your class to get started.</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Enter the invite code your teacher gave you.
+          <h2 className="font-semibold text-lg mb-2">Welcome!</h2>
+          <p className="text-sm text-gray-500">
+            Use the <span className="font-medium text-gray-700">Join Class</span> button
+            in the navigation bar to enter your teacher&apos;s invite code and get started.
           </p>
-          <div className="flex gap-2 justify-center">
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="INVITE CODE"
-              maxLength={6}
-              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm w-40 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            />
-            <button
-              onClick={handleJoinClass}
-              className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-blue-700 font-medium"
-            >
-              Join
-            </button>
-          </div>
-          {joinError && (
-            <p className="text-sm text-red-600 mt-3">{joinError}</p>
-          )}
-          {joinSuccess && (
-            <p className="text-sm text-green-600 mt-3">{joinSuccess}</p>
-          )}
         </section>
       )}
 
-      {/* Has classes — compact class display */}
+      {/* My Classes — clickable cards */}
       {hasClasses && (
-        <section className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500">Class:</span>
+        <section>
+          <h2 className="font-semibold mb-3">My Classes</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {classes.map((c) => (
-              <span
+              <Link
                 key={c.id}
-                className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium"
+                href={`/student/class/${c.id}`}
+                className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-sm transition-all"
               >
-                {c.class_name}
-              </span>
+                <h3 className="font-semibold text-base">{c.class_name}</h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  {subCounts[c.id] || 0} submissions
+                </p>
+                <span className="text-xs text-blue-600 mt-2 block">
+                  View projects & submissions &rarr;
+                </span>
+              </Link>
             ))}
           </div>
         </section>
       )}
 
-      {/* Recent submissions */}
-      <section className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold">Recent Submissions</h2>
-          {recentSubs.length > 0 && (
-            <Link
-              href="/student/submissions"
-              className="text-sm text-blue-600 hover:underline"
-            >
-              View all
-            </Link>
-          )}
-        </div>
-
-        {recentSubs.length === 0 ? (
-          <p className="text-gray-500 text-sm">
-            {hasClasses
-              ? 'No submissions yet. Tap "New Submission" to get started!'
-              : 'Join a class first, then submit your composition.'}
-          </p>
-        ) : (
+      {/* Recent activity */}
+      {recentSubs.length > 0 && (
+        <section className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold mb-3">Recent Activity</h2>
           <div className="space-y-2">
             {recentSubs.map((sub) => (
               <Link
@@ -191,13 +137,13 @@ export default function StudentDashboard() {
               </Link>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
-      {/* Top errors */}
+      {/* Error summary */}
       {topErrors.length > 0 && (
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">My Common Errors</h2>
             <Link
               href="/student/errors"

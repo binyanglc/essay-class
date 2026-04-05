@@ -73,8 +73,8 @@ export default function Navbar() {
       setTimeout(() => {
         setJoinOpen(false);
         setJoinMsg(null);
-        router.refresh();
-      }, 1200);
+        window.location.href = '/student/dashboard';
+      }, 800);
     } else {
       setJoinMsg({ type: 'err', text: data.error || 'Failed to join' });
     }
@@ -87,8 +87,6 @@ export default function Navbar() {
     ? [{ href: '/teacher/dashboard', label: 'My Classes' }]
     : [
         { href: '/student/dashboard', label: 'Dashboard' },
-        { href: '/student/submit', label: 'New Submission' },
-        { href: '/student/submissions', label: 'My Submissions' },
         { href: '/student/errors', label: 'Error Patterns' },
       ];
 
@@ -109,19 +107,19 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-14">
           <Link
             href={isTeacher ? '/teacher/dashboard' : '/student/dashboard'}
-            className="font-semibold text-lg text-gray-900"
+            className="font-semibold text-lg text-gray-900 flex-shrink-0"
           >
             Writing Feedback
           </Link>
 
           {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-5">
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`text-sm ${
-                  pathname === link.href
+                className={`text-sm whitespace-nowrap ${
+                  pathname === link.href || pathname.startsWith(link.href + '/')
                     ? 'text-blue-600 font-medium'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -133,8 +131,8 @@ export default function Navbar() {
             {isStudent && (
               <div className="relative" ref={joinRef}>
                 <button
-                  onClick={() => setJoinOpen(!joinOpen)}
-                  className={`text-sm ${
+                  onClick={() => { setJoinOpen(!joinOpen); setJoinMsg(null); }}
+                  className={`text-sm whitespace-nowrap ${
                     joinOpen
                       ? 'text-blue-600 font-medium'
                       : 'text-gray-600 hover:text-gray-900'
@@ -142,18 +140,49 @@ export default function Navbar() {
                 >
                   Join Class
                 </button>
-                {joinOpen && <JoinDropdown />}
+                {joinOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 z-50">
+                    <p className="text-xs text-gray-500 mb-2">
+                      Enter your teacher&apos;s invite code
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        placeholder="CODE"
+                        maxLength={6}
+                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleJoin}
+                        disabled={joining || !joinCode.trim()}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 font-medium disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {joining ? '...' : 'Join'}
+                      </button>
+                    </div>
+                    {joinMsg && (
+                      <p className={`text-xs mt-2 ${joinMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+                        {joinMsg.text}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
+            <span className="text-gray-200">|</span>
             {profile && (
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-gray-400 whitespace-nowrap">
                 {isAnonymous ? 'Guest' : profile.name}
               </span>
             )}
             <button
               onClick={handleLogout}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap"
             >
               Log Out
             </button>
@@ -164,26 +193,11 @@ export default function Navbar() {
             className="md:hidden p-2"
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               )}
             </svg>
           </button>
@@ -210,14 +224,36 @@ export default function Navbar() {
             {isStudent && (
               <div className="py-2.5">
                 <button
-                  onClick={() => setJoinOpen(!joinOpen)}
+                  onClick={() => { setJoinOpen(!joinOpen); setJoinMsg(null); }}
                   className="text-sm text-gray-700"
                 >
                   Join Class
                 </button>
                 {joinOpen && (
-                  <div className="mt-2">
-                    <JoinDropdown />
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        placeholder="CODE"
+                        maxLength={6}
+                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                      />
+                      <button
+                        onClick={handleJoin}
+                        disabled={joining || !joinCode.trim()}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 font-medium disabled:opacity-50"
+                      >
+                        {joining ? '...' : 'Join'}
+                      </button>
+                    </div>
+                    {joinMsg && (
+                      <p className={`text-xs mt-2 ${joinMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+                        {joinMsg.text}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -234,37 +270,4 @@ export default function Navbar() {
       </div>
     </nav>
   );
-
-  function JoinDropdown() {
-    return (
-      <div className="md:absolute md:right-0 md:top-full md:mt-2 md:w-64 bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-lg md:p-4">
-        <p className="text-xs text-gray-500 mb-2 hidden md:block">
-          Enter your teacher&apos;s invite code
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="CODE"
-            maxLength={6}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-          />
-          <button
-            onClick={handleJoin}
-            disabled={joining}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 font-medium disabled:opacity-50"
-          >
-            {joining ? '...' : 'Join'}
-          </button>
-        </div>
-        {joinMsg && (
-          <p className={`text-xs mt-2 ${joinMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
-            {joinMsg.text}
-          </p>
-        )}
-      </div>
-    );
-  }
 }
