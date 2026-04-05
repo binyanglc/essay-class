@@ -1,6 +1,26 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
 
 export default function LandingPage() {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) {
+      setLoading(false);
+      router.push('/login');
+      return;
+    }
+    router.push('/student/dashboard');
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b border-gray-200">
@@ -35,19 +55,23 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              href="/signup"
-              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            <button
+              onClick={handleGuestLogin}
+              disabled={loading}
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              Get Started
-            </Link>
+              {loading ? 'Entering...' : 'Enter as Guest Student'}
+            </button>
             <Link
               href="/login"
               className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
-              I Have an Account
+              Log In / Sign Up
             </Link>
           </div>
+          <p className="text-xs text-gray-400 mt-3">
+            Guests can submit and get feedback instantly. Create an account to save your history.
+          </p>
 
           <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
             <div className="bg-white p-5 rounded-xl border border-gray-200">
