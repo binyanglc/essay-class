@@ -8,6 +8,47 @@ interface Props {
   classId: string;
 }
 
+async function compressImage(file: File, maxSizeKB = 900): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+
+        // Scale down large images
+        const maxDim = 1600;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress with decreasing quality until under size limit
+        let quality = 0.8;
+        let base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+
+        while (base64.length > maxSizeKB * 1024 && quality > 0.3) {
+          quality -= 0.1;
+          base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+        }
+
+        resolve(base64);
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function SubmissionForm({ classId }: Props) {
   const [title, setTitle] = useState('');
   const [assignmentName, setAssignmentName] = useState('');
@@ -34,6 +75,7 @@ export default function SubmissionForm({ classId }: Props) {
     setError('');
 
     try {
+      // Upload original to storage
       const supabase = createClient();
       const fileName = `${Date.now()}_${file.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -48,35 +90,27 @@ export default function SubmissionForm({ classId }: Props) {
 
       setImageUrl(publicUrl);
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
+      // Compress for OCR (must be under 1MB for free API)
+      const base64 = await compressImage(file);
 
-        try {
-          const res = await fetch('/api/ocr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64 }),
-          });
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
 
-          const data = await res.json();
-          if (data.text) {
-            setOcrText(data.text);
-            setText(data.text);
-          } else {
-            setError(data.error || 'OCR recognition failed');
-          }
-        } catch {
-          setError('OCR failed. Please type your text manually.');
-        }
-        setOcrLoading(false);
-      };
-      reader.readAsDataURL(file);
+      const data = await res.json();
+      if (data.text) {
+        setOcrText(data.text);
+        setText(data.text);
+      } else {
+        setError(data.error || 'OCR recognition failed. You can type your text manually below.');
+      }
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Image upload failed');
-      setOcrLoading(false);
+      setError('Image upload failed. You can type your text manually below.');
     }
+    setOcrLoading(false);
   };
 
   const handleSubmit = async () => {
@@ -153,6 +187,7 @@ export default function SubmissionForm({ classId }: Props) {
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/jpg,image/png"
+          capture="environment"
           onChange={handleImageUpload}
           className="hidden"
         />

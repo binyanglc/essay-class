@@ -6,15 +6,16 @@ export async function POST(request: NextRequest) {
     const { imageBase64 } = await request.json();
 
     if (!imageBase64) {
-      return NextResponse.json({ error: '缺少图片数据' }, { status: 400 });
+      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
     }
 
     const text = await performOCR(imageBase64);
     return NextResponse.json({ text });
   } catch (error) {
     console.error('OCR error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'OCR处理失败，请重试' },
+      { error: `OCR failed: ${message}. Please try again or type your text manually.` },
       { status: 500 }
     );
   }

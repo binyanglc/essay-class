@@ -45,47 +45,47 @@ export default function LandingPage() {
           </p>
 
           <div className="space-y-2.5">
-            <button
-              onClick={handleGuestLogin}
-              disabled={loading}
-              className="w-full border border-gray-300 text-gray-800 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Entering...' : 'Enter as Guest — no sign up needed'}
-            </button>
-
             <div className="flex gap-2.5">
               <Link
-                href="/login"
-                className="flex-1 text-center border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors"
-              >
-                Log In
-              </Link>
-              <Link
                 href="/signup"
-                className="flex-1 text-center bg-gray-900 text-white py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors"
+                className="flex-1 text-center bg-blue-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
               >
                 Sign Up
               </Link>
+              <Link
+                href="/login"
+                className="flex-1 text-center border border-gray-200 text-gray-700 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Log In
+              </Link>
             </div>
+
+            <button
+              onClick={handleGuestLogin}
+              disabled={loading}
+              className="w-full text-gray-500 py-2.5 text-sm hover:text-gray-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Entering...' : 'or continue as guest — no sign up needed'}
+            </button>
           </div>
 
           <div className="mt-14 space-y-4">
             <div className="flex gap-3 items-start">
-              <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-500 text-xs font-medium">1</div>
+              <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 text-xs font-medium">1</div>
               <div>
                 <h3 className="font-medium text-sm">Type or upload a photo</h3>
                 <p className="text-xs text-gray-400">Handwritten or typed — OCR extracts your Chinese text</p>
               </div>
             </div>
             <div className="flex gap-3 items-start">
-              <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-500 text-xs font-medium">2</div>
+              <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 text-xs font-medium">2</div>
               <div>
                 <h3 className="font-medium text-sm">Get AI corrections</h3>
                 <p className="text-xs text-gray-400">Sentence-by-sentence feedback with clear explanations</p>
               </div>
             </div>
             <div className="flex gap-3 items-start">
-              <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-500 text-xs font-medium">3</div>
+              <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 text-xs font-medium">3</div>
               <div>
                 <h3 className="font-medium text-sm">Track your progress</h3>
                 <p className="text-xs text-gray-400">See which errors you repeat — sign up to save history</p>
