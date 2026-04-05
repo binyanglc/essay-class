@@ -67,29 +67,37 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         )}
       </section>
 
-      {/* Vocabulary & Word Choice */}
-      {vocabErrors.length > 0 && (
-        <section>
-          <h3 className="font-semibold text-gray-900 mb-2">Vocabulary & Word Choice</h3>
+      {/* Vocabulary & Word Choice — always show */}
+      <section>
+        <h3 className="font-semibold text-gray-900 mb-2">Vocabulary & Word Choice</h3>
+        {vocabErrors.length > 0 ? (
           <div className="space-y-2">
             {vocabErrors.map((tag, i) => (
               <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+            Great word choices throughout — keep it up!
+          </p>
+        )}
+      </section>
 
-      {/* Grammar */}
-      {grammarErrors.length > 0 && (
-        <section>
-          <h3 className="font-semibold text-gray-900 mb-2">Grammar</h3>
+      {/* Grammar — always show */}
+      <section>
+        <h3 className="font-semibold text-gray-900 mb-2">Grammar</h3>
+        {grammarErrors.length > 0 ? (
           <div className="space-y-2">
             {grammarErrors.map((tag, i) => (
               <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+            No grammar issues found — nice work!
+          </p>
+        )}
+      </section>
 
       {/* Content & Ideas */}
       {feedback.content_feedback && feedback.content_feedback.trim() !== '' && (
