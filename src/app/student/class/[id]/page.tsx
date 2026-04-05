@@ -79,26 +79,33 @@ export default function StudentClassPage() {
                   key={p.id}
                   className="bg-white rounded-xl border border-gray-200 p-5"
                 >
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium">{p.project_name}</h3>
-                      {p.description && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          {p.description}
-                        </p>
-                      )}
-                      {mySubs.length > 0 && (
-                        <p className="text-xs text-gray-400 mt-2">
-                          You submitted {mySubs.length} time{mySubs.length > 1 ? 's' : ''}
-                        </p>
-                      )}
-                    </div>
+                  <h3 className="font-medium">{p.project_name}</h3>
+                  {p.description && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {p.description}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-4 mt-3">
                     <Link
                       href={`/student/submit?classId=${classId}&projectId=${p.id}`}
-                      className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-blue-700 font-medium whitespace-nowrap text-center"
+                      className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 font-medium"
                     >
-                      Submit
+                      New Submission
                     </Link>
+                    {mySubs.length > 0 && (
+                      <span className="text-xs text-gray-400">
+                        {mySubs.length} submitted
+                      </span>
+                    )}
+                    {p.due_date && (
+                      <span className={`text-xs ${
+                        new Date(p.due_date) < new Date()
+                          ? 'text-red-500'
+                          : 'text-gray-400'
+                      }`}>
+                        Due: {new Date(p.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
                 </div>
               );

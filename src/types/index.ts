@@ -46,6 +46,7 @@ export interface Project {
   class_id: string;
   project_name: string;
   description: string;
+  due_date: string | null;
   created_at: string;
 }
 

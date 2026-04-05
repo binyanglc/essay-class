@@ -14,6 +14,7 @@ export default function ClassDetailPage() {
   const [projectCounts, setProjectCounts] = useState<Record<string, number>>({});
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -69,12 +70,14 @@ export default function ClassDetailPage() {
         classId: id,
         projectName: newName,
         description: newDesc,
+        dueDate: newDueDate || null,
       }),
     });
 
     if (res.ok) {
       setNewName('');
       setNewDesc('');
+      setNewDueDate('');
       setShowForm(false);
       loadAll();
     }
@@ -130,6 +133,15 @@ export default function ClassDetailPage() {
               rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
             />
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Due date (optional)</label>
+              <input
+                type="datetime-local"
+                value={newDueDate}
+                onChange={(e) => setNewDueDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              />
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleCreateProject}
@@ -139,7 +151,7 @@ export default function ClassDetailPage() {
                 {creating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); }}
+                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); }}
                 className="text-sm text-gray-500 px-4 py-2"
               >
                 Cancel
@@ -169,7 +181,12 @@ export default function ClassDetailPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {p.due_date && (
+                      <span className={`text-xs ${new Date(p.due_date) < new Date() ? 'text-red-500' : 'text-gray-400'}`}>
+                        Due: {new Date(p.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
                     <span className="text-xs text-gray-400">
                       {projectCounts[p.id] || 0} submissions
                     </span>

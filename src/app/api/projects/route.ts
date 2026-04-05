@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
-    const { classId, projectName, description } = await request.json();
+    const { classId, projectName, description, dueDate } = await request.json();
 
     if (!classId || !projectName?.trim()) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         class_id: classId,
         project_name: projectName.trim(),
         description: description?.trim() || '',
+        due_date: dueDate || null,
       })
       .select()
       .single();
