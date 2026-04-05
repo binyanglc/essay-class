@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateFeedback } from '@/lib/ai-feedback';
-import { getStudentErrorHistory } from '@/lib/error-tracking';
+import { getStudentErrorPatterns } from '@/lib/error-tracking';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Save submission
     const { data: submission, error: subError } = await supabase
       .from('submissions')
       .insert({
@@ -41,21 +40,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Save failed' }, { status: 500 });
     }
 
-    // Get student's previous submission count and error history
     const { count: previousCount } = await supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
       .eq('student_id', user.id)
       .neq('id', submission.id);
 
-    const errorHistory = await getStudentErrorHistory(supabase, user.id);
+    const errorPatterns = await getStudentErrorPatterns(supabase, user.id);
 
-    // Generate AI feedback
     let feedbackData;
     try {
       feedbackData = await generateFeedback(
         finalText,
-        errorHistory,
+        errorPatterns,
         previousCount ?? 0
       );
     } catch (aiError) {
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Save feedback
     const { data: feedback } = await supabase
       .from('feedback')
       .insert({
@@ -75,6 +71,8 @@ export async function POST(request: NextRequest) {
         overall_comment: feedbackData.overall_comment,
         strengths: feedbackData.strengths,
         main_problems: feedbackData.main_problems,
+        content_feedback: feedbackData.content_feedback || '',
+        structure_feedback: feedbackData.structure_feedback || '',
         sentence_revisions: feedbackData.sentence_revisions,
         repeated_error_summary: feedbackData.repeated_error_summary || '',
         next_step_advice: feedbackData.next_step_advice,
@@ -82,7 +80,6 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    // Save error tags
     if (feedbackData.error_tags && feedbackData.error_tags.length > 0) {
       const validTypes = ['vocabulary', 'grammar', 'content', 'structure', 'characters', 'punctuation'];
       const errorTagRows = feedbackData.error_tags
@@ -91,9 +88,11 @@ export async function POST(request: NextRequest) {
           submission_id: submission.id,
           student_id: user.id,
           error_type: tag.error_type,
+          pattern_name: tag.pattern_name || tag.error_type,
           original_text: tag.original_text || '',
           suggested_revision: tag.suggested_revision || '',
           explanation: tag.explanation || '',
+          improvement_tip: tag.improvement_tip || '',
           sentence_index: tag.sentence_index ?? null,
         }));
 

@@ -1,8 +1,8 @@
-import { AIFeedbackResponse, ErrorFrequency } from '@/types';
+import { AIFeedbackResponse, ErrorPattern } from '@/types';
 
 export async function generateFeedback(
   text: string,
-  errorHistory: ErrorFrequency[],
+  errorPatterns: ErrorPattern[],
   previousSubmissionCount: number
 ): Promise<AIFeedbackResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -10,72 +10,63 @@ export async function generateFeedback(
 
   const isFirstSubmission = previousSubmissionCount === 0;
 
-  const historyContext = !isFirstSubmission && errorHistory.length > 0
-    ? `\n\nThis student has submitted ${previousSubmissionCount} previous compositions. Their recurring error patterns are:\n${errorHistory
-        .slice(0, 8)
-        .map((e) => `- ${e.error_type}: appeared ${e.count} times across past submissions`)
-        .join('\n')}\n\nPlease specifically address these recurring patterns in your feedback.`
-    : '';
+  let historyContext = '';
+  if (!isFirstSubmission && errorPatterns.length > 0) {
+    historyContext = `\n\nIMPORTANT — This student has ${previousSubmissionCount} previous submissions. Here are their SPECIFIC past errors. Check if any of these SAME mistakes appear in the current composition:\n`;
+    for (const p of errorPatterns.slice(0, 10)) {
+      historyContext += `\n[${p.pattern_name}] (${p.error_type}, appeared ${p.count}x before)`;
+      for (const ex of p.examples.slice(0, 2)) {
+        historyContext += `\n  - "${ex.original}" → "${ex.revision}"`;
+      }
+    }
+    historyContext += `\n\nFor repeated_error_summary: ONLY mention errors that ACTUALLY appear again in this composition. Be specific: "You wrote X again — last time you also wrote X instead of Y. Remember the rule: ..." If no past errors are repeated, set repeated_error_summary to "".\n`;
+  }
 
-  const recurringInstruction = isFirstSubmission
-    ? '\n\nThis is the student\'s FIRST submission. Set "repeated_error_summary" to an empty string "" since there is no prior history.'
-    : '\n\nThis student has prior submissions. In "repeated_error_summary", specifically name which error types have appeared before and how many times. For example: "You have made vocabulary errors in 3 of your last 4 submissions. Grammar issues with 了 have appeared twice before."';
+  const prompt = `You are a professional Chinese language writing teacher for American college students learning Chinese. Analyze this composition thoroughly.
 
-  const prompt = `You are a professional Chinese language writing teacher. Your students are American learners of Chinese. Analyze the following Chinese composition and provide structured feedback.
-
-IMPORTANT: All explanations, comments, and advice must be in ENGLISH. Chinese text should only appear in "original" and "revised" fields.
-
-Student's composition:
+STUDENT'S COMPOSITION:
 ${text}
 ${historyContext}
 
-ERROR CATEGORIES — you must ONLY use these 6 types. Classify carefully:
-- "vocabulary" — wrong word, wrong collocation, unnatural word choice, wrong measure word
-- "grammar" — wrong sentence pattern, wrong use of 了/的/地/得, word order errors, missing or extra grammatical elements
-- "content" — weak argument, unclear ideas, lack of examples, off-topic, shallow analysis
-- "structure" — poor organization, missing introduction/conclusion, weak transitions between ideas, paragraph issues
-- "characters" — wrong Chinese character, typo, homophone error
-- "punctuation" — wrong or missing punctuation marks
+Provide feedback as JSON with this EXACT structure:
 
-CLASSIFICATION RULES:
-- If a word is used in the wrong context, that's "vocabulary", NOT "grammar"
-- 了/的/地/得 errors are "grammar" only if the grammatical particle itself is wrong
-- If the essay lacks a clear argument or examples, that's "content"
-- If transitions between paragraphs are weak, that's "structure"
-- When in doubt between categories, choose the most specific one
-${recurringInstruction}
-
-Return feedback in this exact JSON format:
 {
-  "overall_comment": "2-3 sentence assessment in English",
-  "strengths": ["Specific strength 1", "Specific strength 2"],
-  "main_problems": ["Specific problem 1", "Specific problem 2"],
+  "overall_comment": "2-3 sentence assessment",
+  "strengths": ["specific strength 1", "specific strength 2"],
+  "content_feedback": "Assess the IDEAS: Is the main argument clear? Are there enough supporting examples? Is the reasoning logical? Are ideas developed or shallow? Provide specific suggestions. If the composition is too short for meaningful content analysis, note that.",
+  "structure_feedback": "Assess the ORGANIZATION: Is there a clear beginning/middle/end? Are transitions used between ideas (e.g., 首先/其次/另外/总之)? Does the writing flow logically? Are paragraphs well-structured? Give specific suggestions.",
+  "main_problems": ["specific problem 1", "specific problem 2"],
   "sentence_revisions": [
     {
-      "original": "Original Chinese sentence with error",
+      "original": "Chinese sentence with error",
       "revised": "Corrected Chinese sentence",
-      "explanation": "Clear explanation in English of what was wrong and why the correction is better"
+      "explanation": "Clear English explanation"
     }
   ],
   "error_tags": [
     {
-      "error_type": "vocabulary|grammar|content|structure|characters|punctuation",
+      "error_type": "characters|vocabulary|grammar|content|structure|punctuation",
+      "pattern_name": "A short, specific name for this error pattern in English, e.g. '了 usage', 'comparison word order', '在...看来 expression', 'missing topic sentence', 'wrong measure word'. This must be specific enough to track across submissions.",
       "original_text": "Chinese text with error",
-      "suggested_revision": "Corrected Chinese text",
-      "explanation": "Explanation in English",
+      "suggested_revision": "Corrected Chinese",
+      "explanation": "English explanation of what's wrong",
+      "improvement_tip": "A clear rule or tip the student can study. E.g. 'Rule: Use 在...看来 (not 在...看) to express opinions. Pattern: 在 + person + 看来，...sentence.' Include the grammar pattern or usage rule.",
       "sentence_index": 0
     }
   ],
-  "repeated_error_summary": "${isFirstSubmission ? '' : 'Summary of recurring patterns from past submissions'}",
-  "next_step_advice": "Specific, actionable advice referencing the actual errors found. For example: Practice using 在...看来 instead of 在...看 for expressing opinions. Review the difference between 生钱 and 省钱. Try rewriting paragraph 2 with a clearer topic sentence."
+  "repeated_error_summary": "${isFirstSubmission ? '' : 'ONLY if the student repeats a SPECIFIC past error in this composition. Reference the exact error. Otherwise empty string.'}",
+  "next_step_advice": "Reference SPECIFIC errors from this composition with CONCRETE practice tasks. E.g.: 'Practice the pattern 在...看来 by writing 3 sentences expressing different opinions. Review the difference between 生钱 (earn money) and 省钱 (save money) — write a paragraph using both correctly.'"
 }
 
-Requirements:
-1. Return valid JSON only
-2. error_type MUST be one of the 6 categories listed above
-3. Include 2-5 sentence_revisions
-4. next_step_advice must reference SPECIFIC errors found in this composition with CONCRETE practice suggestions
-5. All explanations in English; Chinese only in original/revised fields`;
+RULES:
+1. error_type must be one of: characters, vocabulary, grammar, content, structure, punctuation
+2. pattern_name must be SPECIFIC and CONSISTENT — the same error should always get the same pattern_name
+3. content_feedback and structure_feedback are REQUIRED — always provide substantive analysis
+4. improvement_tip should contain an actual RULE or PATTERN the student can study
+5. Include 2-5 sentence_revisions
+6. All explanations in English; Chinese only in original/revised fields
+7. ${isFirstSubmission ? 'This is the FIRST submission — set repeated_error_summary to ""' : 'Only mention recurring errors if the SAME specific mistake appears again'}
+8. Return valid JSON only`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -88,7 +79,7 @@ Requirements:
       messages: [
         {
           role: 'system',
-          content: 'You are a Chinese writing teacher for American students. Return JSON only. All explanations in English. Classify errors carefully into the correct category.',
+          content: 'You are a Chinese writing teacher for American students. Return JSON only. Be specific and pedagogically useful.',
         },
         { role: 'user', content: prompt },
       ],

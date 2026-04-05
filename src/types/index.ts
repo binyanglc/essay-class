@@ -9,13 +9,23 @@ export type ErrorType =
   | 'punctuation';
 
 export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
+  characters: 'Characters',
   vocabulary: 'Vocabulary & Word Choice',
   grammar: 'Grammar',
   content: 'Content & Ideas',
   structure: 'Organization & Coherence',
-  characters: 'Character Errors',
   punctuation: 'Punctuation',
 };
+
+// Display order for error types
+export const ERROR_TYPE_ORDER: ErrorType[] = [
+  'characters',
+  'vocabulary',
+  'grammar',
+  'content',
+  'structure',
+  'punctuation',
+];
 
 export interface Profile {
   id: string;
@@ -61,6 +71,8 @@ export interface Feedback {
   overall_comment: string;
   strengths: string[];
   main_problems: string[];
+  content_feedback: string;
+  structure_feedback: string;
   sentence_revisions: SentenceRevision[];
   repeated_error_summary: string;
   next_step_advice: string;
@@ -78,11 +90,25 @@ export interface ErrorTag {
   submission_id: string;
   student_id: string;
   error_type: ErrorType;
+  pattern_name: string;
   original_text: string;
   suggested_revision: string;
   explanation: string;
+  improvement_tip: string;
   sentence_index: number | null;
   created_at: string;
+}
+
+export interface ErrorPattern {
+  pattern_name: string;
+  error_type: ErrorType;
+  count: number;
+  examples: {
+    original: string;
+    revision: string;
+    explanation: string;
+  }[];
+  improvement_tip: string;
 }
 
 export interface ErrorFrequency {
@@ -95,12 +121,16 @@ export interface AIFeedbackResponse {
   overall_comment: string;
   strengths: string[];
   main_problems: string[];
+  content_feedback: string;
+  structure_feedback: string;
   sentence_revisions: SentenceRevision[];
   error_tags: {
     error_type: ErrorType;
+    pattern_name: string;
     original_text: string;
     suggested_revision: string;
     explanation: string;
+    improvement_tip: string;
     sentence_index: number | null;
   }[];
   repeated_error_summary: string;

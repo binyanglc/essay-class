@@ -1,51 +1,94 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ErrorFrequency, ErrorType } from '@/types';
+import { ErrorFrequency, ErrorPattern, ErrorType } from '@/types';
 
-export async function getStudentErrorHistory(
+export async function getStudentErrorPatterns(
   supabase: SupabaseClient,
   studentId: string
-): Promise<ErrorFrequency[]> {
+): Promise<ErrorPattern[]> {
   const { data: errorTags } = await supabase
     .from('error_tags')
-    .select('error_type, original_text, suggested_revision')
+    .select('error_type, pattern_name, original_text, suggested_revision, explanation, improvement_tip')
     .eq('student_id', studentId)
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(300);
 
   if (!errorTags || errorTags.length === 0) return [];
 
-  const frequencyMap = new Map<
+  const patternMap = new Map<
     string,
-    { count: number; examples: { original: string; revision: string }[] }
+    {
+      error_type: string;
+      count: number;
+      examples: { original: string; revision: string; explanation: string }[];
+      improvement_tip: string;
+    }
   >();
 
   for (const tag of errorTags) {
-    const existing = frequencyMap.get(tag.error_type);
+    const key = tag.pattern_name || tag.error_type;
+    const existing = patternMap.get(key);
     if (existing) {
       existing.count++;
-      if (existing.examples.length < 3) {
+      if (existing.examples.length < 5) {
         existing.examples.push({
           original: tag.original_text || '',
           revision: tag.suggested_revision || '',
+          explanation: tag.explanation || '',
         });
       }
     } else {
-      frequencyMap.set(tag.error_type, {
+      patternMap.set(key, {
+        error_type: tag.error_type,
         count: 1,
         examples: [
           {
             original: tag.original_text || '',
             revision: tag.suggested_revision || '',
+            explanation: tag.explanation || '',
           },
         ],
+        improvement_tip: tag.improvement_tip || '',
       });
     }
   }
 
-  return Array.from(frequencyMap.entries())
+  return Array.from(patternMap.entries())
+    .map(([pattern_name, data]) => ({
+      pattern_name,
+      error_type: data.error_type as ErrorType,
+      count: data.count,
+      examples: data.examples,
+      improvement_tip: data.improvement_tip,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// Keep for backward compatibility (teacher dashboard etc.)
+export async function getStudentErrorHistory(
+  supabase: SupabaseClient,
+  studentId: string
+): Promise<ErrorFrequency[]> {
+  const patterns = await getStudentErrorPatterns(supabase, studentId);
+  const typeMap = new Map<string, { count: number; examples: { original: string; revision: string }[] }>();
+
+  for (const p of patterns) {
+    const existing = typeMap.get(p.error_type);
+    if (existing) {
+      existing.count += p.count;
+      existing.examples.push(...p.examples.map(e => ({ original: e.original, revision: e.revision })));
+    } else {
+      typeMap.set(p.error_type, {
+        count: p.count,
+        examples: p.examples.map(e => ({ original: e.original, revision: e.revision })),
+      });
+    }
+  }
+
+  return Array.from(typeMap.entries())
     .map(([error_type, data]) => ({
       error_type: error_type as ErrorType,
-      ...data,
+      count: data.count,
+      examples: data.examples.slice(0, 5),
     }))
     .sort((a, b) => b.count - a.count);
 }
@@ -62,18 +105,10 @@ export async function getClassErrorSummary(
   classId: string,
   options?: { since?: string; assignmentName?: string }
 ) {
-  if (options?.since) {
-    // filter param used below
-  }
-
   const { data: submissions } = await (() => {
-    let q = supabase
-      .from('submissions')
-      .select('id')
-      .eq('class_id', classId);
+    let q = supabase.from('submissions').select('id').eq('class_id', classId);
     if (options?.since) q = q.gte('created_at', options.since);
-    if (options?.assignmentName)
-      q = q.eq('assignment_name', options.assignmentName);
+    if (options?.assignmentName) q = q.eq('assignment_name', options.assignmentName);
     return q;
   })();
 
@@ -92,10 +127,7 @@ export async function getClassErrorSummary(
 
   const typeMap = new Map<
     string,
-    {
-      count: number;
-      examples: { original: string; revision: string; explanation: string }[];
-    }
+    { count: number; examples: { original: string; revision: string; explanation: string }[] }
   >();
 
   for (const tag of errorTags) {
@@ -112,13 +144,11 @@ export async function getClassErrorSummary(
     } else {
       typeMap.set(tag.error_type, {
         count: 1,
-        examples: [
-          {
-            original: tag.original_text || '',
-            revision: tag.suggested_revision || '',
-            explanation: tag.explanation || '',
-          },
-        ],
+        examples: [{
+          original: tag.original_text || '',
+          revision: tag.suggested_revision || '',
+          explanation: tag.explanation || '',
+        }],
       });
     }
   }
