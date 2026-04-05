@@ -1,6 +1,6 @@
 'use client';
 
-import { Feedback, ErrorTag, ERROR_TYPE_LABELS, FEEDBACK_SECTION_ORDER, ErrorType } from '@/types';
+import { Feedback, ErrorTag, ErrorType } from '@/types';
 
 interface Props {
   feedback: Feedback;
@@ -51,51 +51,51 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         </section>
       )}
 
-      {/* Characters — always show */}
+      {/* Characters */}
       <section>
         <h3 className="font-semibold text-gray-900 mb-2">Characters</h3>
-        {characterErrors.length > 0 ? (
-          <div className="space-y-2">
+        <SectionComment
+          comment={feedback.characters_comment}
+          hasErrors={characterErrors.length > 0}
+        />
+        {characterErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
             {characterErrors.map((tag, i) => (
               <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
-            No character errors found — well done!
-          </p>
         )}
       </section>
 
-      {/* Vocabulary & Word Choice — always show */}
+      {/* Vocabulary & Word Choice */}
       <section>
         <h3 className="font-semibold text-gray-900 mb-2">Vocabulary & Word Choice</h3>
-        {vocabErrors.length > 0 ? (
-          <div className="space-y-2">
+        <SectionComment
+          comment={feedback.vocabulary_comment}
+          hasErrors={vocabErrors.length > 0}
+        />
+        {vocabErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
             {vocabErrors.map((tag, i) => (
               <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
-            Great word choices throughout — keep it up!
-          </p>
         )}
       </section>
 
-      {/* Grammar — always show */}
+      {/* Grammar */}
       <section>
         <h3 className="font-semibold text-gray-900 mb-2">Grammar</h3>
-        {grammarErrors.length > 0 ? (
-          <div className="space-y-2">
+        <SectionComment
+          comment={feedback.grammar_comment}
+          hasErrors={grammarErrors.length > 0}
+        />
+        {grammarErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
             {grammarErrors.map((tag, i) => (
               <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
-            No grammar issues found — nice work!
-          </p>
         )}
       </section>
 
@@ -109,7 +109,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         </section>
       )}
 
-      {/* Organization & Structure (includes punctuation) */}
+      {/* Organization & Structure */}
       {feedback.structure_feedback && feedback.structure_feedback.trim() !== '' && (
         <section>
           <h3 className="font-semibold text-indigo-700 mb-2">Organization & Structure</h3>
@@ -119,6 +119,19 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         </section>
       )}
     </div>
+  );
+}
+
+function SectionComment({ comment, hasErrors }: { comment?: string; hasErrors: boolean }) {
+  if (!comment) return null;
+  return (
+    <p className={`text-sm p-3 rounded-lg ${
+      hasErrors
+        ? 'text-gray-700 bg-gray-50'
+        : 'text-green-700 bg-green-50'
+    }`}>
+      {comment}
+    </p>
   );
 }
 

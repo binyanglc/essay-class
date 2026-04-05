@@ -36,6 +36,9 @@ Return a JSON object with this EXACT structure:
       "explanation": "Clear English explanation of what was wrong and why"
     }
   ],
+  "characters_comment": "1-2 sentence comment on character usage. If there ARE character errors, briefly summarize the issue (e.g. 'You confused 在 and 再 — pay attention to these similar-looking characters.'). If there are NO character errors, give specific praise referencing the composition (e.g. 'All characters are written correctly, including some advanced ones like 虽然 and 虽.'). Be specific to THIS composition, not generic.",
+  "vocabulary_comment": "1-2 sentence comment on vocabulary. If there ARE vocabulary errors, briefly summarize (e.g. 'Watch out for word choice — you used 生钱 instead of 省钱.'). If there are NO vocabulary errors, praise specifically (e.g. 'Good use of vocabulary like 方便 and 节约, appropriate for this topic.'). Reference actual words from the composition.",
+  "grammar_comment": "1-2 sentence comment on grammar. If there ARE grammar errors, briefly summarize (e.g. 'You have some word order issues in comparison sentences.'). If there are NO grammar errors, praise specifically (e.g. 'Your sentence structures are accurate — nice use of 虽然...但是 and 不但...而且.'). Reference actual patterns from the composition.",
   "content_feedback": "Assess the IDEAS and CONTENT: Is the main argument clear? Are there enough supporting details or examples? Is the reasoning logical? Are ideas developed enough or too shallow? Provide specific, actionable suggestions.",
   "structure_feedback": "Assess ORGANIZATION and STRUCTURE: Is there a clear beginning, middle, and end? Are transitions used between ideas (e.g., 首先、其次、另外、总之)? Does the writing flow logically? Also note any PUNCTUATION issues (wrong punctuation marks, missing punctuation, etc.).",
   "error_tags": [

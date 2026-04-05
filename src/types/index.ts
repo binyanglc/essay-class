@@ -69,6 +69,9 @@ export interface Feedback {
   overall_comment: string;
   strengths: string[];
   main_problems: string[];
+  characters_comment: string;
+  vocabulary_comment: string;
+  grammar_comment: string;
   content_feedback: string;
   structure_feedback: string;
   sentence_revisions: SentenceRevision[];
@@ -117,6 +120,9 @@ export interface ErrorFrequency {
 
 export interface AIFeedbackResponse {
   overall_comment: string;
+  characters_comment: string;
+  vocabulary_comment: string;
+  grammar_comment: string;
   content_feedback: string;
   structure_feedback: string;
   sentence_revisions: SentenceRevision[];
