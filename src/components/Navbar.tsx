@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -10,6 +10,11 @@ export default function Navbar() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinMsg, setJoinMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [joining, setJoining] = useState(false);
+  const joinRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -33,12 +38,50 @@ export default function Navbar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (joinRef.current && !joinRef.current.contains(e.target as Node)) {
+        setJoinOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
   };
 
+  const handleJoin = async () => {
+    if (!joinCode.trim()) return;
+    setJoining(true);
+    setJoinMsg(null);
+
+    const res = await fetch('/api/classes/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteCode: joinCode }),
+    });
+
+    const data = await res.json();
+    setJoining(false);
+
+    if (data.success || data.class) {
+      setJoinMsg({ type: 'ok', text: `Joined: ${data.class.class_name}` });
+      setJoinCode('');
+      setTimeout(() => {
+        setJoinOpen(false);
+        setJoinMsg(null);
+        router.refresh();
+      }, 1200);
+    } else {
+      setJoinMsg({ type: 'err', text: data.error || 'Failed to join' });
+    }
+  };
+
   const isTeacher = profile?.role === 'teacher';
+  const isStudent = !isTeacher;
 
   const links = isTeacher
     ? [{ href: '/teacher/dashboard', label: 'My Classes' }]
@@ -71,6 +114,7 @@ export default function Navbar() {
             Writing Feedback
           </Link>
 
+          {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-6">
             {links.map((link) => (
               <Link
@@ -85,6 +129,23 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+
+            {isStudent && (
+              <div className="relative" ref={joinRef}>
+                <button
+                  onClick={() => setJoinOpen(!joinOpen)}
+                  className={`text-sm ${
+                    joinOpen
+                      ? 'text-blue-600 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Join Class
+                </button>
+                {joinOpen && <JoinDropdown />}
+              </div>
+            )}
+
             {profile && (
               <span className="text-sm text-gray-400">
                 {isAnonymous ? 'Guest' : profile.name}
@@ -98,6 +159,7 @@ export default function Navbar() {
             </button>
           </div>
 
+          {/* Mobile hamburger */}
           <button
             className="md:hidden p-2"
             onClick={() => setMenuOpen(!menuOpen)}
@@ -127,6 +189,7 @@ export default function Navbar() {
           </button>
         </div>
 
+        {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden pb-4 border-t border-gray-100 pt-2">
             {links.map((link) => (
@@ -143,6 +206,23 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+
+            {isStudent && (
+              <div className="py-2.5">
+                <button
+                  onClick={() => setJoinOpen(!joinOpen)}
+                  className="text-sm text-gray-700"
+                >
+                  Join Class
+                </button>
+                {joinOpen && (
+                  <div className="mt-2">
+                    <JoinDropdown />
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={handleLogout}
               className="block py-2.5 text-sm text-gray-500"
@@ -154,4 +234,37 @@ export default function Navbar() {
       </div>
     </nav>
   );
+
+  function JoinDropdown() {
+    return (
+      <div className="md:absolute md:right-0 md:top-full md:mt-2 md:w-64 bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-lg md:p-4">
+        <p className="text-xs text-gray-500 mb-2 hidden md:block">
+          Enter your teacher&apos;s invite code
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            placeholder="CODE"
+            maxLength={6}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+          />
+          <button
+            onClick={handleJoin}
+            disabled={joining}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 font-medium disabled:opacity-50"
+          >
+            {joining ? '...' : 'Join'}
+          </button>
+        </div>
+        {joinMsg && (
+          <p className={`text-xs mt-2 ${joinMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+            {joinMsg.text}
+          </p>
+        )}
+      </div>
+    );
+  }
 }
