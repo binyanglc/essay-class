@@ -1,30 +1,28 @@
 export type UserRole = 'teacher' | 'student';
 
 export type ErrorType =
+  | 'characters'
   | 'vocabulary'
   | 'grammar'
   | 'content'
   | 'structure'
-  | 'characters'
   | 'punctuation';
 
-export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
+export const ERROR_TAG_TYPES = ['characters', 'vocabulary', 'grammar'] as const;
+
+export const ERROR_TYPE_LABELS: Record<string, string> = {
   characters: 'Characters',
   vocabulary: 'Vocabulary & Word Choice',
   grammar: 'Grammar',
   content: 'Content & Ideas',
-  structure: 'Organization & Coherence',
+  structure: 'Organization & Structure',
   punctuation: 'Punctuation',
 };
 
-// Display order for error types
-export const ERROR_TYPE_ORDER: ErrorType[] = [
+export const FEEDBACK_SECTION_ORDER: ErrorType[] = [
   'characters',
   'vocabulary',
   'grammar',
-  'content',
-  'structure',
-  'punctuation',
 ];
 
 export interface Profile {
@@ -119,13 +117,11 @@ export interface ErrorFrequency {
 
 export interface AIFeedbackResponse {
   overall_comment: string;
-  strengths: string[];
-  main_problems: string[];
   content_feedback: string;
   structure_feedback: string;
   sentence_revisions: SentenceRevision[];
   error_tags: {
-    error_type: ErrorType;
+    error_type: string;
     pattern_name: string;
     original_text: string;
     suggested_revision: string;
@@ -133,6 +129,4 @@ export interface AIFeedbackResponse {
     improvement_tip: string;
     sentence_index: number | null;
   }[];
-  repeated_error_summary: string;
-  next_step_advice: string;
 }

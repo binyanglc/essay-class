@@ -8,65 +8,61 @@ export async function generateFeedback(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
 
-  const isFirstSubmission = previousSubmissionCount === 0;
-
   let historyContext = '';
-  if (!isFirstSubmission && errorPatterns.length > 0) {
-    historyContext = `\n\nIMPORTANT — This student has ${previousSubmissionCount} previous submissions. Here are their SPECIFIC past errors. Check if any of these SAME mistakes appear in the current composition:\n`;
+  if (previousSubmissionCount > 0 && errorPatterns.length > 0) {
+    historyContext = `\n\nThis student has ${previousSubmissionCount} previous submissions. Here are their past error patterns for reference:\n`;
     for (const p of errorPatterns.slice(0, 10)) {
       historyContext += `\n[${p.pattern_name}] (${p.error_type}, appeared ${p.count}x before)`;
       for (const ex of p.examples.slice(0, 2)) {
         historyContext += `\n  - "${ex.original}" → "${ex.revision}"`;
       }
     }
-    historyContext += `\n\nFor repeated_error_summary: ONLY mention errors that ACTUALLY appear again in this composition. Be specific: "You wrote X again — last time you also wrote X instead of Y. Remember the rule: ..." If no past errors are repeated, set repeated_error_summary to "".\n`;
   }
 
-  const prompt = `You are a professional Chinese language writing teacher for American college students learning Chinese. Analyze this composition thoroughly.
+  const prompt = `You are a Chinese language writing teacher for American college students. Analyze this composition thoroughly.
 
 STUDENT'S COMPOSITION:
 ${text}
 ${historyContext}
 
-Provide feedback as JSON with this EXACT structure:
+Return a JSON object with this EXACT structure:
 
 {
-  "overall_comment": "2-3 sentence assessment",
-  "strengths": ["specific strength 1", "specific strength 2"],
-  "content_feedback": "Assess the IDEAS: Is the main argument clear? Are there enough supporting examples? Is the reasoning logical? Are ideas developed or shallow? Provide specific suggestions. If the composition is too short for meaningful content analysis, note that.",
-  "structure_feedback": "Assess the ORGANIZATION: Is there a clear beginning/middle/end? Are transitions used between ideas (e.g., 首先/其次/另外/总之)? Does the writing flow logically? Are paragraphs well-structured? Give specific suggestions.",
-  "main_problems": ["specific problem 1", "specific problem 2"],
+  "overall_comment": "2-3 sentence overall assessment. Mention what the student did well AND main areas for improvement.",
   "sentence_revisions": [
     {
-      "original": "Chinese sentence with error",
+      "original": "Original Chinese sentence with error",
       "revised": "Corrected Chinese sentence",
-      "explanation": "Clear English explanation"
+      "explanation": "Clear English explanation of what was wrong and why"
     }
   ],
+  "content_feedback": "Assess the IDEAS and CONTENT: Is the main argument clear? Are there enough supporting details or examples? Is the reasoning logical? Are ideas developed enough or too shallow? Provide specific, actionable suggestions.",
+  "structure_feedback": "Assess ORGANIZATION and STRUCTURE: Is there a clear beginning, middle, and end? Are transitions used between ideas (e.g., 首先、其次、另外、总之)? Does the writing flow logically? Also note any PUNCTUATION issues (wrong punctuation marks, missing punctuation, etc.).",
   "error_tags": [
     {
-      "error_type": "characters|vocabulary|grammar|content|structure|punctuation",
-      "pattern_name": "A short, specific name for this error pattern in English, e.g. '了 usage', 'comparison word order', '在...看来 expression', 'missing topic sentence', 'wrong measure word'. This must be specific enough to track across submissions.",
+      "error_type": "characters|vocabulary|grammar",
+      "pattern_name": "A short, specific name for this error pattern, e.g. '了 usage', 'word order in comparison', '在...看来 expression', 'wrong measure word', 'similar-looking characters'. Must be specific enough to track across submissions.",
       "original_text": "Chinese text with error",
       "suggested_revision": "Corrected Chinese",
-      "explanation": "English explanation of what's wrong",
-      "improvement_tip": "A clear rule or tip the student can study. E.g. 'Rule: Use 在...看来 (not 在...看) to express opinions. Pattern: 在 + person + 看来，...sentence.' Include the grammar pattern or usage rule.",
+      "explanation": "English explanation",
+      "improvement_tip": "A concrete rule or tip. E.g. 'Rule: 在 + person + 看来 means in someone's opinion. Pattern: 在我看来，...' Include the grammar pattern or usage rule so students can study it.",
       "sentence_index": 0
     }
-  ],
-  "repeated_error_summary": "${isFirstSubmission ? '' : 'ONLY if the student repeats a SPECIFIC past error in this composition. Reference the exact error. Otherwise empty string.'}",
-  "next_step_advice": "Reference SPECIFIC errors from this composition with CONCRETE practice tasks. E.g.: 'Practice the pattern 在...看来 by writing 3 sentences expressing different opinions. Review the difference between 生钱 (earn money) and 省钱 (save money) — write a paragraph using both correctly.'"
+  ]
 }
 
-RULES:
-1. error_type must be one of: characters, vocabulary, grammar, content, structure, punctuation
-2. pattern_name must be SPECIFIC and CONSISTENT — the same error should always get the same pattern_name
-3. content_feedback and structure_feedback are REQUIRED — always provide substantive analysis
-4. improvement_tip should contain an actual RULE or PATTERN the student can study
-5. Include 2-5 sentence_revisions
-6. All explanations in English; Chinese only in original/revised fields
-7. ${isFirstSubmission ? 'This is the FIRST submission — set repeated_error_summary to ""' : 'Only mention recurring errors if the SAME specific mistake appears again'}
-8. Return valid JSON only`;
+CLASSIFICATION RULES for error_tags:
+- "characters": Wrong Chinese character used (e.g. writing 在 instead of 再, handwriting errors, similar-looking character confusion). If no character errors exist, do NOT include any "characters" entries.
+- "vocabulary": Wrong word choice, wrong measure word, incorrect collocations, using a word with the wrong meaning
+- "grammar": Word order errors, incorrect use of particles (了/过/着/的/得/地), missing or wrong prepositions, sentence structure errors
+
+IMPORTANT:
+- content_feedback and structure_feedback are REQUIRED — always provide substantive analysis
+- Include punctuation feedback inside structure_feedback
+- error_tags should ONLY use types: characters, vocabulary, grammar
+- All explanations in English; Chinese only in original/revised text fields
+- Include 2-5 sentence_revisions covering the most important corrections
+- Return valid JSON only`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',

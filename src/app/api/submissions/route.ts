@@ -68,20 +68,20 @@ export async function POST(request: NextRequest) {
       .from('feedback')
       .insert({
         submission_id: submission.id,
-        overall_comment: feedbackData.overall_comment,
-        strengths: feedbackData.strengths,
-        main_problems: feedbackData.main_problems,
+        overall_comment: feedbackData.overall_comment || '',
+        strengths: [],
+        main_problems: [],
         content_feedback: feedbackData.content_feedback || '',
         structure_feedback: feedbackData.structure_feedback || '',
-        sentence_revisions: feedbackData.sentence_revisions,
-        repeated_error_summary: feedbackData.repeated_error_summary || '',
-        next_step_advice: feedbackData.next_step_advice,
+        sentence_revisions: feedbackData.sentence_revisions || [],
+        repeated_error_summary: '',
+        next_step_advice: '',
       })
       .select()
       .single();
 
     if (feedbackData.error_tags && feedbackData.error_tags.length > 0) {
-      const validTypes = ['vocabulary', 'grammar', 'content', 'structure', 'characters', 'punctuation'];
+      const validTypes = ['characters', 'vocabulary', 'grammar'];
       const errorTagRows = feedbackData.error_tags
         .filter((tag) => validTypes.includes(tag.error_type))
         .map((tag) => ({

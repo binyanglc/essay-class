@@ -40,7 +40,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (path === '/login' || path === '/signup')) {
+  // Allow anonymous (guest) users to access /login and /signup so they can register
+  if (user && !user.is_anonymous && (path === '/login' || path === '/signup')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
