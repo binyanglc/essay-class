@@ -40,6 +40,21 @@ export default function LoginPage() {
     );
   };
 
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    setError('');
+
+    const { error: anonError } = await supabase.auth.signInAnonymously();
+
+    if (anonError) {
+      setError('Guest login failed. Please try signing up instead.');
+      setLoading(false);
+      return;
+    }
+
+    router.push('/student/dashboard');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -86,6 +101,26 @@ export default function LoginPage() {
             {loading ? 'Logging in...' : 'Log In'}
           </button>
         </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-gray-50 px-3 text-gray-400">or</span>
+          </div>
+        </div>
+
+        <button
+          onClick={handleGuestLogin}
+          disabled={loading}
+          className="w-full border border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          Continue as Guest Student
+        </button>
+        <p className="text-xs text-gray-400 text-center mt-2">
+          No account needed. You can save your progress later.
+        </p>
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Don&apos;t have an account?{' '}

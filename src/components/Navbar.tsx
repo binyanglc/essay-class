@@ -8,6 +8,7 @@ import { Profile } from '@/types';
 
 export default function Navbar() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -19,6 +20,7 @@ export default function Navbar() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        setIsAnonymous(user.is_anonymous ?? false);
         const { data } = await supabase
           .from('profiles')
           .select('*')
@@ -49,6 +51,17 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      {isAnonymous && (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 text-center">
+          <span className="text-xs text-blue-700">
+            You&apos;re using a guest account.{' '}
+            <Link href="/signup" className="underline font-medium">
+              Create an account
+            </Link>{' '}
+            to save your progress permanently.
+          </span>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-4">
         <div className="flex justify-between items-center h-14">
           <Link
@@ -73,7 +86,9 @@ export default function Navbar() {
               </Link>
             ))}
             {profile && (
-              <span className="text-sm text-gray-400">{profile.name}</span>
+              <span className="text-sm text-gray-400">
+                {isAnonymous ? 'Guest' : profile.name}
+              </span>
             )}
             <button
               onClick={handleLogout}

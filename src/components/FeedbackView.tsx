@@ -79,7 +79,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
                   key={type}
                   className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm"
                 >
-                  {ERROR_TYPE_LABELS[type as ErrorType]} &times; {count}
+                  {ERROR_TYPE_LABELS[type as ErrorType] || type} &times; {count}
                 </span>
               );
             })}
@@ -87,7 +87,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         </section>
       )}
 
-      {feedback.repeated_error_summary && (
+      {feedback.repeated_error_summary && feedback.repeated_error_summary.trim() !== '' && (
         <section>
           <h3 className="font-semibold text-amber-700 mb-2">Recurring Error Alert</h3>
           <p className="text-gray-700 bg-amber-50 p-4 rounded-lg border border-amber-100">

@@ -11,14 +11,14 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
     const body = await request.json();
     const { classId, title, assignmentName, imageUrl, ocrText, finalText } = body;
 
     if (!finalText || !classId) {
-      return NextResponse.json({ error: '缺少必填字段' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     // Save submission
@@ -38,23 +38,32 @@ export async function POST(request: NextRequest) {
 
     if (subError) {
       console.error('Submission insert error:', subError);
-      return NextResponse.json({ error: '保存失败' }, { status: 500 });
+      return NextResponse.json({ error: 'Save failed' }, { status: 500 });
     }
 
-    // Get student error history for AI context
+    // Get student's previous submission count and error history
+    const { count: previousCount } = await supabase
+      .from('submissions')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', user.id)
+      .neq('id', submission.id);
+
     const errorHistory = await getStudentErrorHistory(supabase, user.id);
 
     // Generate AI feedback
     let feedbackData;
     try {
-      feedbackData = await generateFeedback(finalText, errorHistory);
+      feedbackData = await generateFeedback(
+        finalText,
+        errorHistory,
+        previousCount ?? 0
+      );
     } catch (aiError) {
       console.error('AI feedback error:', aiError);
-      // Save submission even if AI fails — feedback can be retried
       return NextResponse.json({
         submission,
         feedback: null,
-        warning: 'AI反馈生成失败，作文已保存',
+        warning: 'AI feedback generation failed. Composition saved.',
       });
     }
 
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
         strengths: feedbackData.strengths,
         main_problems: feedbackData.main_problems,
         sentence_revisions: feedbackData.sentence_revisions,
-        repeated_error_summary: feedbackData.repeated_error_summary,
+        repeated_error_summary: feedbackData.repeated_error_summary || '',
         next_step_advice: feedbackData.next_step_advice,
       })
       .select()
@@ -75,22 +84,27 @@ export async function POST(request: NextRequest) {
 
     // Save error tags
     if (feedbackData.error_tags && feedbackData.error_tags.length > 0) {
-      const errorTagRows = feedbackData.error_tags.map((tag) => ({
-        submission_id: submission.id,
-        student_id: user.id,
-        error_type: tag.error_type,
-        original_text: tag.original_text || '',
-        suggested_revision: tag.suggested_revision || '',
-        explanation: tag.explanation || '',
-        sentence_index: tag.sentence_index ?? null,
-      }));
+      const validTypes = ['vocabulary', 'grammar', 'content', 'structure', 'characters', 'punctuation'];
+      const errorTagRows = feedbackData.error_tags
+        .filter((tag) => validTypes.includes(tag.error_type))
+        .map((tag) => ({
+          submission_id: submission.id,
+          student_id: user.id,
+          error_type: tag.error_type,
+          original_text: tag.original_text || '',
+          suggested_revision: tag.suggested_revision || '',
+          explanation: tag.explanation || '',
+          sentence_index: tag.sentence_index ?? null,
+        }));
 
-      await supabase.from('error_tags').insert(errorTagRows);
+      if (errorTagRows.length > 0) {
+        await supabase.from('error_tags').insert(errorTagRows);
+      }
     }
 
     return NextResponse.json({ submission, feedback });
   } catch (error) {
     console.error('Submission error:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

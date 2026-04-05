@@ -1,28 +1,20 @@
 export type UserRole = 'teacher' | 'student';
 
 export type ErrorType =
-  | 'vocabulary_word_choice'
-  | 'collocation'
-  | 'grammar_le'
-  | 'grammar_de'
-  | 'word_order'
-  | 'punctuation'
-  | 'coherence_transition'
-  | 'register_style'
-  | 'character_error'
-  | 'other';
+  | 'vocabulary'
+  | 'grammar'
+  | 'content'
+  | 'structure'
+  | 'characters'
+  | 'punctuation';
 
 export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
-  vocabulary_word_choice: 'Vocabulary / Word Choice',
-  collocation: 'Collocation',
-  grammar_le: 'Grammar (了)',
-  grammar_de: 'Grammar (的/地/得)',
-  word_order: 'Word Order',
+  vocabulary: 'Vocabulary & Word Choice',
+  grammar: 'Grammar',
+  content: 'Content & Ideas',
+  structure: 'Organization & Coherence',
+  characters: 'Character Errors',
   punctuation: 'Punctuation',
-  coherence_transition: 'Coherence / Transitions',
-  register_style: 'Register / Style',
-  character_error: 'Character Error',
-  other: 'Other',
 };
 
 export interface Profile {
