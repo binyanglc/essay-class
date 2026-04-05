@@ -22,75 +22,78 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-white border-b border-gray-200">
+    <div className="min-h-screen flex flex-col bg-white">
+      {/* Header */}
+      <header className="border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 h-14 flex justify-between items-center">
           <span className="font-semibold text-lg">Writing Feedback</span>
-          <div className="flex gap-3">
-            <Link
-              href="/login"
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5"
-            >
-              Log In
-            </Link>
-            <Link
-              href="/signup"
-              className="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700"
-            >
-              Sign Up
-            </Link>
-          </div>
+          <Link
+            href="/login"
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            Log In
+          </Link>
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-4">
-        <div className="max-w-2xl text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Chinese Writing AI Feedback
+      {/* Hero — mobile-first, compact */}
+      <main className="flex-1 flex flex-col justify-center px-4 py-10">
+        <div className="max-w-lg mx-auto w-full">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-3 text-center sm:text-left">
+            Get instant feedback on your Chinese writing
           </h1>
-          <p className="text-lg text-gray-600 mb-8 leading-relaxed">
-            Submit your Chinese composition and get instant AI feedback.
-            <br className="hidden sm:block" />
-            Upload a photo of handwritten work, review OCR results, and receive structured corrections.
+          <p className="text-gray-500 mb-8 text-center sm:text-left">
+            Type or photograph your composition. AI gives you corrections and explanations in seconds.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          {/* Primary CTA */}
+          <div className="space-y-3">
             <button
               onClick={handleGuestLogin}
               disabled={loading}
-              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold text-base hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Entering...' : 'Enter as Guest Student'}
+              {loading ? 'Entering...' : 'Start Now — No Sign Up Needed'}
             </button>
-            <Link
-              href="/login"
-              className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-            >
-              Log In / Sign Up
-            </Link>
-          </div>
-          <p className="text-xs text-gray-400 mt-3">
-            Guests can submit and get feedback instantly. Create an account to save your history.
-          </p>
 
-          <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
-            <div className="bg-white p-5 rounded-xl border border-gray-200">
-              <h3 className="font-semibold mb-2">Photo Upload</h3>
-              <p className="text-sm text-gray-600">
-                Take a photo of your handwritten composition and let OCR extract the Chinese text
-              </p>
+            <div className="flex gap-3">
+              <Link
+                href="/login"
+                className="flex-1 text-center border border-gray-200 text-gray-700 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Log In
+              </Link>
+              <Link
+                href="/signup"
+                className="flex-1 text-center border border-gray-200 text-gray-700 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Sign Up
+              </Link>
             </div>
-            <div className="bg-white p-5 rounded-xl border border-gray-200">
-              <h3 className="font-semibold mb-2">Instant Feedback</h3>
-              <p className="text-sm text-gray-600">
-                AI analyzes your writing and provides sentence-level corrections with explanations
-              </p>
+          </div>
+
+          {/* Feature list — compact for mobile */}
+          <div className="mt-12 space-y-4">
+            <div className="flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-sm">1</div>
+              <div>
+                <h3 className="font-medium text-sm">Type or upload a photo</h3>
+                <p className="text-xs text-gray-400">Handwritten or typed — OCR extracts your Chinese text</p>
+              </div>
             </div>
-            <div className="bg-white p-5 rounded-xl border border-gray-200">
-              <h3 className="font-semibold mb-2">Error Tracking</h3>
-              <p className="text-sm text-gray-600">
-                Track your error patterns over time to identify and improve weak areas
-              </p>
+            <div className="flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-sm">2</div>
+              <div>
+                <h3 className="font-medium text-sm">Get AI corrections</h3>
+                <p className="text-xs text-gray-400">Sentence-by-sentence feedback with clear explanations</p>
+              </div>
+            </div>
+            <div className="flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-sm">3</div>
+              <div>
+                <h3 className="font-medium text-sm">Track your progress</h3>
+                <p className="text-xs text-gray-400">See which errors you repeat — sign up to save history</p>
+              </div>
             </div>
           </div>
         </div>
