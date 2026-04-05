@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Project, Submission, Feedback, ErrorTag, Profile, ErrorType } from '@/types';
@@ -21,6 +21,7 @@ interface SentenceRevision {
 
 export default function ProjectDetailPage() {
   const { id: classId, projectId } = useParams();
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
@@ -32,6 +33,10 @@ export default function ProjectDetailPage() {
   const [issues, setIssues] = useState<ClassError[]>([]);
   const [issueCount, setIssueCount] = useState(0);
   const [showIssues, setShowIssues] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
+  const [projNameDraft, setProjNameDraft] = useState('');
+  const [projDescDraft, setProjDescDraft] = useState('');
+  const [projDueDraft, setProjDueDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -116,6 +121,43 @@ export default function ProjectDetailPage() {
     setSaving(false);
   };
 
+  const handleEditProject = async () => {
+    if (!projNameDraft.trim()) return;
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectName: projNameDraft,
+        description: projDescDraft,
+        dueDate: projDueDraft || null,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setProject(updated);
+      setEditingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!confirm('Delete this project? All submissions and feedback will be permanently removed.')) return;
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    if (res.ok) router.push(`/teacher/class/${classId}`);
+  };
+
+  const handleDeleteSubmission = async (subId: string) => {
+    if (!confirm('Delete this submission and its feedback?')) return;
+    const res = await fetch(`/api/submissions/${subId}`, { method: 'DELETE' });
+    if (res.ok) {
+      if (selectedSub?.id === subId) {
+        setSelectedSub(null);
+        setSelectedFeedback(null);
+        setSelectedTags([]);
+      }
+      loadData();
+    }
+  };
+
   const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null;
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
@@ -130,9 +172,81 @@ export default function ProjectDetailPage() {
         >
           &larr; Back to class
         </Link>
-        <h1 className="text-2xl font-bold mt-1">{project.project_name}</h1>
-        {project.description && (
-          <p className="text-sm text-gray-500 mt-1">{project.description}</p>
+
+        {editingProject ? (
+          <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+            <input
+              type="text"
+              value={projNameDraft}
+              onChange={(e) => setProjNameDraft(e.target.value)}
+              placeholder="Project name"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              autoFocus
+            />
+            <textarea
+              value={projDescDraft}
+              onChange={(e) => setProjDescDraft(e.target.value)}
+              placeholder="Description / writing prompt"
+              rows={2}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+            />
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Due date</label>
+              <input
+                type="datetime-local"
+                value={projDueDraft}
+                onChange={(e) => setProjDueDraft(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleEditProject}
+                disabled={!projNameDraft.trim()}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingProject(false)}
+                className="text-sm text-gray-500 px-4 py-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mt-1">
+              <h1 className="text-2xl font-bold">{project.project_name}</h1>
+              <button
+                onClick={() => {
+                  setEditingProject(true);
+                  setProjNameDraft(project.project_name);
+                  setProjDescDraft(project.description || '');
+                  setProjDueDraft(project.due_date ? new Date(project.due_date).toISOString().slice(0, 16) : '');
+                }}
+                className="text-xs text-gray-400 hover:text-blue-600"
+                title="Edit project"
+              >
+                ✏️
+              </button>
+            </div>
+            {project.description && (
+              <p className="text-sm text-gray-500 mt-1">{project.description}</p>
+            )}
+            {project.due_date && (
+              <p className={`text-xs mt-1 ${new Date(project.due_date) < new Date() ? 'text-red-500' : 'text-gray-400'}`}>
+                Due: {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            )}
+            <button
+              onClick={handleDeleteProject}
+              className="text-xs text-red-400 hover:text-red-600 mt-2"
+            >
+              Delete this project
+            </button>
+          </>
         )}
       </div>
 
@@ -163,27 +277,40 @@ export default function ProjectDetailPage() {
               {submissions.map((sub) => {
                 const profile = sub.profiles as unknown as Profile;
                 return (
-                  <button
+                  <div
                     key={sub.id}
-                    onClick={() => handleSelectSubmission(sub)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                    className={`p-3 rounded-lg border transition-colors ${
                       selectedSub?.id === sub.id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-100 hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium">
-                        {profile?.name || 'Unknown'}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(sub.created_at).toLocaleDateString('en-US')}
-                      </span>
+                    <div className="flex justify-between items-start">
+                      <button
+                        onClick={() => handleSelectSubmission(sub)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">
+                            {profile?.name || 'Unknown'}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {new Date(sub.created_at).toLocaleDateString('en-US')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                          {sub.final_text.substring(0, 60)}
+                        </p>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSubmission(sub.id)}
+                        className="text-xs text-red-300 hover:text-red-600 ml-2 flex-shrink-0 mt-0.5"
+                        title="Delete submission"
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">
-                      {sub.final_text.substring(0, 60)}
-                    </p>
-                  </button>
+                  </div>
                 );
               })}
             </div>
