@@ -35,9 +35,13 @@ export default function ClassDetailPage() {
 
     const { data: memberData } = await supabase
       .from('class_members')
-      .select('*, profiles(*)')
+      .select('*, profiles!student_id(*)')
       .eq('class_id', id);
-    setMembers(memberData || []);
+    const studentMembers = (memberData || []).filter((m) => {
+      const p = m.profiles as unknown as Profile;
+      return p?.role === 'student';
+    });
+    setMembers(studentMembers);
 
     const res = await fetch(`/api/projects?classId=${id}`);
     const projectData = await res.json();
@@ -206,17 +210,25 @@ export default function ClassDetailPage() {
           <p className="text-gray-500 text-sm">No students have joined yet</p>
         ) : (
           <div className="space-y-2">
-            {members.map((m) => {
+            {members.map((m, idx) => {
               const profile = m.profiles as unknown as Profile;
+              const displayName = (profile?.name && profile.name !== 'Guest' && profile.name.trim())
+                ? profile.name
+                : profile?.email
+                  ? profile.email
+                  : `Guest Student ${idx + 1}`;
               return (
                 <Link
                   key={m.id}
                   href={`/teacher/student/${m.student_id}?classId=${id}`}
                   className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-50 border border-gray-100"
                 >
-                  <span className="text-sm font-medium">
-                    {profile?.name || profile?.email || 'Unknown'}
-                  </span>
+                  <div>
+                    <span className="text-sm font-medium">{displayName}</span>
+                    <span className="text-xs text-gray-400 ml-2">
+                      joined {new Date(m.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
                   <span className="text-xs text-blue-600">View &rarr;</span>
                 </Link>
               );

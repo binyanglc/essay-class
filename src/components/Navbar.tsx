@@ -145,9 +145,7 @@ export default function Navbar() {
                   Join Class
                 </button>
                 {joinOpen && (
-                  <div className="absolute top-full mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 z-50"
-                    style={{ right: 'auto', left: '50%', transform: 'translateX(-50%)' }}
-                  >
+                  <div className="absolute top-full mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 z-50 right-0">
                     <p className="text-xs text-gray-500 mb-2">
                       Enter your teacher&apos;s invite code
                     </p>
