@@ -25,7 +25,7 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <header className="border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 h-14 flex justify-between items-center">
-          <span className="font-semibold text-lg">Writing Feedback</span>
+          <span className="font-semibold text-lg">Chinese Writing Class</span>
           <Link
             href="/login"
             className="text-sm text-gray-600 hover:text-gray-900"

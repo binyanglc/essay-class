@@ -12,6 +12,9 @@ export default function StudentDashboard() {
   const [recentSubs, setRecentSubs] = useState<Submission[]>([]);
   const [topErrors, setTopErrors] = useState<ErrorFrequency[]>([]);
   const [subCounts, setSubCounts] = useState<Record<string, number>>({});
+  const [joinCode, setJoinCode] = useState('');
+  const [joinMsg, setJoinMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [joining, setJoining] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -69,6 +72,26 @@ export default function StudentDashboard() {
 
   const hasClasses = classes.length > 0;
 
+  const handleJoin = async () => {
+    if (!joinCode.trim()) return;
+    setJoining(true);
+    setJoinMsg(null);
+    const res = await fetch('/api/classes/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteCode: joinCode }),
+    });
+    const data = await res.json();
+    setJoining(false);
+    if (data.success || data.class) {
+      setJoinMsg({ type: 'ok', text: `Joined: ${data.class.class_name}` });
+      setJoinCode('');
+      setTimeout(() => window.location.reload(), 800);
+    } else {
+      setJoinMsg({ type: 'err', text: data.error || 'Failed to join' });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">
@@ -77,14 +100,37 @@ export default function StudentDashboard() {
           : 'Dashboard'}
       </h1>
 
-      {/* No class — prompt to join */}
+      {/* No class — prompt to join with inline input */}
       {!hasClasses && (
-        <section className="bg-white rounded-xl border-2 border-blue-200 p-6 text-center">
-          <h2 className="font-semibold text-lg mb-2">Welcome!</h2>
-          <p className="text-sm text-gray-500">
-            Use the <span className="font-medium text-gray-700">Join Class</span> button
-            in the navigation bar to enter your teacher&apos;s invite code and get started.
+        <section className="bg-white rounded-xl border-2 border-blue-200 p-6">
+          <h2 className="font-semibold text-lg mb-2 text-center">Welcome!</h2>
+          <p className="text-sm text-gray-500 text-center mb-4">
+            Enter your teacher&apos;s invite code to join a class and get started.
           </p>
+          <div className="flex justify-center gap-2">
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="INVITE CODE"
+              maxLength={6}
+              className="border border-gray-300 rounded-lg px-4 py-2.5 text-sm w-36 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+              autoFocus
+            />
+            <button
+              onClick={handleJoin}
+              disabled={joining || !joinCode.trim()}
+              className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-blue-700 font-medium disabled:opacity-50"
+            >
+              {joining ? 'Joining...' : 'Join Class'}
+            </button>
+          </div>
+          {joinMsg && (
+            <p className={`text-xs mt-3 text-center ${joinMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+              {joinMsg.text}
+            </p>
+          )}
         </section>
       )}
 

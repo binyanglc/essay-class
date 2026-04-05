@@ -14,7 +14,8 @@ export default function Navbar() {
   const [joinCode, setJoinCode] = useState('');
   const [joinMsg, setJoinMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [joining, setJoining] = useState(false);
-  const joinRef = useRef<HTMLDivElement>(null);
+  const joinDesktopRef = useRef<HTMLDivElement>(null);
+  const joinMobileRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -40,7 +41,10 @@ export default function Navbar() {
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (joinRef.current && !joinRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inDesktop = joinDesktopRef.current?.contains(target);
+      const inMobile = joinMobileRef.current?.contains(target);
+      if (!inDesktop && !inMobile) {
         setJoinOpen(false);
       }
     }
@@ -109,7 +113,7 @@ export default function Navbar() {
             href={isTeacher ? '/teacher/dashboard' : '/student/dashboard'}
             className="font-semibold text-lg text-gray-900 flex-shrink-0"
           >
-            Writing Feedback
+            Chinese Writing Class
           </Link>
 
           {/* Desktop nav */}
@@ -129,7 +133,7 @@ export default function Navbar() {
             ))}
 
             {isStudent && (
-              <div className="relative" ref={joinRef}>
+              <div className="relative" ref={joinDesktopRef}>
                 <button
                   onClick={() => { setJoinOpen(!joinOpen); setJoinMsg(null); }}
                   className={`text-sm whitespace-nowrap ${
@@ -141,7 +145,9 @@ export default function Navbar() {
                   Join Class
                 </button>
                 {joinOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 z-50">
+                  <div className="absolute top-full mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 z-50"
+                    style={{ right: 'auto', left: '50%', transform: 'translateX(-50%)' }}
+                  >
                     <p className="text-xs text-gray-500 mb-2">
                       Enter your teacher&apos;s invite code
                     </p>
@@ -222,7 +228,7 @@ export default function Navbar() {
             ))}
 
             {isStudent && (
-              <div className="py-2.5">
+              <div className="py-2.5" ref={joinMobileRef}>
                 <button
                   onClick={() => { setJoinOpen(!joinOpen); setJoinMsg(null); }}
                   className="text-sm text-gray-700"
@@ -240,6 +246,7 @@ export default function Navbar() {
                         maxLength={6}
                         className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28 uppercase tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                         onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                        autoFocus
                       />
                       <button
                         onClick={handleJoin}
