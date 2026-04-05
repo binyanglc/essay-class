@@ -15,10 +15,23 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { classId, title, assignmentName, imageUrl, ocrText, finalText } = body;
+    const { classId, projectId, title, assignmentName, imageUrl, ocrText, finalText } = body;
 
     if (!finalText || !classId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // If projectId provided, look up project name for assignment_name
+    let resolvedAssignment = assignmentName || null;
+    if (projectId) {
+      const { data: project } = await supabase
+        .from('projects')
+        .select('project_name')
+        .eq('id', projectId)
+        .single();
+      if (project) {
+        resolvedAssignment = project.project_name;
+      }
     }
 
     const { data: submission, error: subError } = await supabase
@@ -26,8 +39,9 @@ export async function POST(request: NextRequest) {
       .insert({
         student_id: user.id,
         class_id: classId,
+        project_id: projectId || null,
         title: title || null,
-        assignment_name: assignmentName || null,
+        assignment_name: resolvedAssignment,
         image_url: imageUrl || null,
         ocr_text: ocrText || null,
         final_text: finalText,

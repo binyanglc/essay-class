@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import SubmissionForm from '@/components/SubmissionForm';
-import { Class } from '@/types';
+import { Class, Project } from '@/types';
 
 export default function SubmitPage() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState('');
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -38,6 +40,21 @@ export default function SubmitPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedClass) {
+      setProjects([]);
+      setSelectedProject('');
+      return;
+    }
+    async function loadProjects() {
+      const res = await fetch(`/api/projects?classId=${selectedClass}`);
+      const data = await res.json();
+      setProjects(data || []);
+      setSelectedProject('');
+    }
+    loadProjects();
+  }, [selectedClass]);
+
   if (loading) {
     return <p className="text-gray-500">Loading...</p>;
   }
@@ -47,7 +64,7 @@ export default function SubmitPage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-bold mb-2">No Class Joined</h2>
         <p className="text-gray-500 mb-4">
-          Please join a class first using the invite code on your dashboard.
+          Join a class first using the invite code from your teacher.
         </p>
         <a
           href="/student/dashboard"
@@ -59,12 +76,15 @@ export default function SubmitPage() {
     );
   }
 
+  const selectedProjectData = projects.find((p) => p.id === selectedProject);
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">New Submission</h1>
 
+      {/* Class selection */}
       {classes.length > 1 && (
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Select Class
           </label>
@@ -83,8 +103,49 @@ export default function SubmitPage() {
         </div>
       )}
 
-      {selectedClass ? (
-        <SubmissionForm classId={selectedClass} />
+      {/* Project selection */}
+      {selectedClass && projects.length > 0 && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Project
+          </label>
+          <div className="space-y-2">
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelectedProject(p.id)}
+                className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                  selectedProject === p.id
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-sm font-medium">{p.project_name}</span>
+                {p.description && (
+                  <p className="text-xs text-gray-500 mt-1">{p.description}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Show prompt if project selected */}
+      {selectedProjectData?.description && (
+        <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+          <p className="text-xs text-blue-600 font-medium mb-1">Writing Prompt</p>
+          <p className="text-sm text-gray-700">{selectedProjectData.description}</p>
+        </div>
+      )}
+
+      {/* Form */}
+      {selectedClass && (projects.length === 0 || selectedProject) ? (
+        <SubmissionForm
+          classId={selectedClass}
+          projectId={selectedProject || undefined}
+        />
+      ) : selectedClass && projects.length > 0 && !selectedProject ? (
+        <p className="text-gray-500 text-sm">Please select a project first</p>
       ) : (
         <p className="text-gray-500 text-sm">Please select a class first</p>
       )}

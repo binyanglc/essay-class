@@ -103,11 +103,12 @@ export function categorizeErrorFrequency(count: number): string {
 export async function getClassErrorSummary(
   supabase: SupabaseClient,
   classId: string,
-  options?: { since?: string; assignmentName?: string }
+  options?: { since?: string; projectId?: string; assignmentName?: string }
 ) {
   const { data: submissions } = await (() => {
     let q = supabase.from('submissions').select('id').eq('class_id', classId);
     if (options?.since) q = q.gte('created_at', options.since);
+    if (options?.projectId) q = q.eq('project_id', options.projectId);
     if (options?.assignmentName) q = q.eq('assignment_name', options.assignmentName);
     return q;
   })();

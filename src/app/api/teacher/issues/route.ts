@@ -10,16 +10,17 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
     const searchParams = request.nextUrl.searchParams;
     const classId = searchParams.get('classId');
-    const filter = searchParams.get('filter') || 'all'; // today | assignment | all
+    const projectId = searchParams.get('projectId');
+    const filter = searchParams.get('filter') || 'all';
     const assignmentName = searchParams.get('assignment') || undefined;
 
     if (!classId) {
-      return NextResponse.json({ error: '缺少班级ID' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing classId' }, { status: 400 });
     }
 
     let since: string | undefined;
@@ -31,12 +32,13 @@ export async function GET(request: NextRequest) {
 
     const summary = await getClassErrorSummary(supabase, classId, {
       since,
+      projectId: projectId || undefined,
       assignmentName: filter === 'assignment' ? assignmentName : undefined,
     });
 
     return NextResponse.json(summary);
   } catch (error) {
     console.error('Teacher issues error:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

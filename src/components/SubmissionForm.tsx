@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   classId: string;
+  projectId?: string;
 }
 
 async function compressImage(file: File, maxSizeKB = 900): Promise<string> {
@@ -49,9 +50,8 @@ async function compressImage(file: File, maxSizeKB = 900): Promise<string> {
   });
 }
 
-export default function SubmissionForm({ classId }: Props) {
+export default function SubmissionForm({ classId, projectId }: Props) {
   const [title, setTitle] = useState('');
-  const [assignmentName, setAssignmentName] = useState('');
   const [text, setText] = useState('');
   const [ocrText, setOcrText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -128,8 +128,8 @@ export default function SubmissionForm({ classId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           classId,
+          projectId: projectId || undefined,
           title: title || undefined,
-          assignmentName: assignmentName || undefined,
           imageUrl: imageUrl || undefined,
           ocrText: ocrText || undefined,
           finalText: text,
@@ -152,31 +152,17 @@ export default function SubmissionForm({ classId }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Title (optional)
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Composition title"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Assignment (optional)
-          </label>
-          <input
-            type="text"
-            value={assignmentName}
-            onChange={(e) => setAssignmentName(e.target.value)}
-            placeholder="e.g. Week 3 Essay"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Title (optional)
+        </label>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Composition title"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+        />
       </div>
 
       <div>

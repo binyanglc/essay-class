@@ -41,6 +41,14 @@ export interface Class {
   created_at: string;
 }
 
+export interface Project {
+  id: string;
+  class_id: string;
+  project_name: string;
+  description: string;
+  created_at: string;
+}
+
 export interface ClassMember {
   id: string;
   class_id: string;
@@ -53,6 +61,7 @@ export interface Submission {
   id: string;
   student_id: string;
   class_id: string;
+  project_id: string | null;
   title: string | null;
   assignment_name: string | null;
   image_url: string | null;
@@ -61,6 +70,7 @@ export interface Submission {
   created_at: string;
   feedback?: Feedback;
   profiles?: Profile;
+  projects?: Project;
 }
 
 export interface Feedback {
@@ -77,6 +87,7 @@ export interface Feedback {
   sentence_revisions: SentenceRevision[];
   repeated_error_summary: string;
   next_step_advice: string;
+  teacher_edited_at: string | null;
   created_at: string;
 }
 

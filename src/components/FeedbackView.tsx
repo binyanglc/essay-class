@@ -23,6 +23,13 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
   return (
     <div className="space-y-6">
+      {feedback.teacher_edited_at && (
+        <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+          Reviewed by teacher &middot;{' '}
+          {new Date(feedback.teacher_edited_at).toLocaleDateString('en-US')}
+        </p>
+      )}
+
       {/* Overall Assessment */}
       <section>
         <h3 className="font-semibold text-gray-900 mb-2">Overall Assessment</h3>
