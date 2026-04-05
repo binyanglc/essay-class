@@ -26,7 +26,7 @@ export default function SubmissionForm({ classId }: Props) {
 
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
     if (!validTypes.includes(file.type)) {
-      setError('请上传 JPG 或 PNG 格式的图片');
+      setError('Please upload a JPG or PNG image');
       return;
     }
 
@@ -64,24 +64,24 @@ export default function SubmissionForm({ classId }: Props) {
             setOcrText(data.text);
             setText(data.text);
           } else {
-            setError(data.error || 'OCR识别失败');
+            setError(data.error || 'OCR recognition failed');
           }
         } catch {
-          setError('OCR识别失败，请手动输入');
+          setError('OCR failed. Please type your text manually.');
         }
         setOcrLoading(false);
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error('Upload error:', err);
-      setError('图片上传失败');
+      setError('Image upload failed');
       setOcrLoading(false);
     }
   };
 
   const handleSubmit = async () => {
     if (!text.trim()) {
-      setError('请输入作文内容');
+      setError('Please enter your composition');
       return;
     }
 
@@ -107,10 +107,10 @@ export default function SubmissionForm({ classId }: Props) {
       if (data.submission) {
         router.push(`/student/submissions/${data.submission.id}`);
       } else {
-        setError(data.error || '提交失败');
+        setError(data.error || 'Submission failed');
       }
     } catch {
-      setError('提交失败，请重试');
+      setError('Submission failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -121,25 +121,25 @@ export default function SubmissionForm({ classId }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            标题（选填）
+            Title (optional)
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="作文标题"
+            placeholder="Composition title"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            作业名称（选填）
+            Assignment (optional)
           </label>
           <input
             type="text"
             value={assignmentName}
             onChange={(e) => setAssignmentName(e.target.value)}
-            placeholder="例如：第三周作文"
+            placeholder="e.g. Week 3 Essay"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
           />
         </div>
@@ -147,7 +147,7 @@ export default function SubmissionForm({ classId }: Props) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          上传图片（手写或打印稿）
+          Upload Photo (handwritten or printed)
         </label>
         <input
           ref={fileInputRef}
@@ -162,21 +162,21 @@ export default function SubmissionForm({ classId }: Props) {
           disabled={ocrLoading}
           className="w-full sm:w-auto border-2 border-dashed border-gray-300 rounded-lg px-6 py-4 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors disabled:opacity-50"
         >
-          {ocrLoading ? '正在识别中...' : '点击上传图片'}
+          {ocrLoading ? 'Recognizing text...' : 'Click to upload image'}
         </button>
         {imageUrl && (
           <p className="text-xs text-green-600 mt-2">
-            图片已上传，OCR文字已填入下方
+            Image uploaded. OCR text has been filled in below.
           </p>
         )}
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          作文内容
+          Composition
           {ocrText && (
             <span className="text-gray-400 font-normal ml-2">
-              （OCR识别结果，请检查并修正）
+              (OCR result — please review and correct)
             </span>
           )}
         </label>
@@ -184,10 +184,10 @@ export default function SubmissionForm({ classId }: Props) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={12}
-          placeholder="在此输入或粘贴中文作文，或上传图片自动识别..."
+          placeholder="Type or paste your Chinese composition here, or upload a photo above..."
           className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y outline-none"
         />
-        <p className="text-xs text-gray-400 mt-1">{text.length} 字</p>
+        <p className="text-xs text-gray-400 mt-1">{text.length} characters</p>
       </div>
 
       {error && (
@@ -201,12 +201,12 @@ export default function SubmissionForm({ classId }: Props) {
         disabled={loading || !text.trim()}
         className="w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {loading ? '正在提交并生成反馈...' : '提交作文'}
+        {loading ? 'Submitting & generating feedback...' : 'Submit'}
       </button>
 
       {loading && (
         <p className="text-sm text-gray-500 animate-pulse">
-          AI正在分析您的作文，请稍候（约10-20秒）...
+          AI is analyzing your composition. Please wait (~10-20 seconds)...
         </p>
       )}
     </div>

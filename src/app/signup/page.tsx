@@ -22,7 +22,7 @@ export default function SignupPage() {
     setError('');
 
     if (password.length < 6) {
-      setError('密码至少6个字符');
+      setError('Password must be at least 6 characters');
       setLoading(false);
       return;
     }
@@ -47,12 +47,12 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center mb-8">注册</h1>
+        <h1 className="text-2xl font-bold text-center mb-8">Sign Up</h1>
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              姓名
+              Name
             </label>
             <input
               type="text"
@@ -65,7 +65,7 @@ export default function SignupPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              邮箱
+              Email
             </label>
             <input
               type="email"
@@ -78,7 +78,7 @@ export default function SignupPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              密码
+              Password
             </label>
             <input
               type="password"
@@ -92,7 +92,7 @@ export default function SignupPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              身份
+              I am a...
             </label>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -103,7 +103,7 @@ export default function SignupPage() {
                   onChange={() => setRole('student')}
                   className="text-blue-600"
                 />
-                <span className="text-sm">学生</span>
+                <span className="text-sm">Student</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -113,7 +113,7 @@ export default function SignupPage() {
                   onChange={() => setRole('teacher')}
                   className="text-blue-600"
                 />
-                <span className="text-sm">教师</span>
+                <span className="text-sm">Teacher</span>
               </label>
             </div>
           </div>
@@ -129,14 +129,14 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? '注册中...' : '注册'}
+            {loading ? 'Creating account...' : 'Sign Up'}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          已有账号？{' '}
+          Already have an account?{' '}
           <Link href="/login" className="text-blue-600 hover:underline">
-            登录
+            Log In
           </Link>
         </p>
       </div>

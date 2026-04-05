@@ -16,14 +16,14 @@ interface Props {
 export default function ClassIssues({ errors, totalSubmissions }: Props) {
   if (errors.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">暂无提交数据</p>
+      <p className="text-gray-500 text-center py-12">No submission data yet</p>
     );
   }
 
   return (
     <div className="space-y-8">
       <p className="text-sm text-gray-500">
-        基于 {totalSubmissions} 篇近期提交分析
+        Based on {totalSubmissions} recent submissions
       </p>
 
       {errors.slice(0, 5).map((e, idx) => (
@@ -39,7 +39,7 @@ export default function ClassIssues({ errors, totalSubmissions }: Props) {
               <h3 className="font-semibold text-lg">
                 {ERROR_TYPE_LABELS[e.error_type]}
               </h3>
-              <p className="text-sm text-gray-500">出现 {e.count} 次</p>
+              <p className="text-sm text-gray-500">{e.count} occurrences</p>
             </div>
           </div>
 

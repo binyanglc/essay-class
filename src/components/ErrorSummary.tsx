@@ -10,10 +10,10 @@ interface Props {
 
 export default function ErrorSummary({
   errors,
-  title = '常见错误类型',
+  title = 'Common Error Types',
 }: Props) {
   if (errors.length === 0) {
-    return <p className="text-gray-500 text-sm">暂无错误记录</p>;
+    return <p className="text-gray-500 text-sm">No error records yet</p>;
   }
 
   const maxCount = Math.max(...errors.map((e) => e.count));
@@ -29,7 +29,7 @@ export default function ErrorSummary({
                 {ERROR_TYPE_LABELS[e.error_type]}
               </span>
               <span className="text-xs text-gray-500">
-                {e.count}次 &middot; {categorizeErrorFrequency(e.count)}
+                {e.count}x &middot; {categorizeErrorFrequency(e.count)}
               </span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-2.5">

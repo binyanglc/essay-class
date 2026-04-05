@@ -71,11 +71,11 @@ export default function StudentDashboard() {
 
     const data = await res.json();
     if (data.success || data.class) {
-      setJoinSuccess(`已加入班级: ${data.class.class_name}`);
+      setJoinSuccess(`Joined class: ${data.class.class_name}`);
       setJoinCode('');
       loadData();
     } else {
-      setJoinError(data.error || '加入失败');
+      setJoinError(data.error || 'Failed to join');
     }
   };
 
@@ -83,25 +83,25 @@ export default function StudentDashboard() {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">
-          {profile?.name ? `${profile.name}，你好` : '我的主页'}
+          {profile?.name ? `Hi, ${profile.name}` : 'Dashboard'}
         </h1>
         <Link
           href="/student/submit"
           className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
         >
-          提交新作文
+          New Submission
         </Link>
       </div>
 
       {/* Join class */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold mb-3">加入班级</h2>
+        <h2 className="font-semibold mb-3">Join a Class</h2>
         <div className="flex gap-2">
           <input
             type="text"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="输入邀请码"
+            placeholder="Invite code"
             maxLength={6}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 uppercase tracking-widest focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
           />
@@ -109,7 +109,7 @@ export default function StudentDashboard() {
             onClick={handleJoinClass}
             className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-800"
           >
-            加入
+            Join
           </button>
         </div>
         {joinError && (
@@ -121,7 +121,7 @@ export default function StudentDashboard() {
 
         {classes.length > 0 && (
           <div className="mt-4">
-            <p className="text-sm text-gray-500 mb-2">已加入的班级：</p>
+            <p className="text-sm text-gray-500 mb-2">My classes:</p>
             <div className="flex flex-wrap gap-2">
               {classes.map((c) => (
                 <span
@@ -139,17 +139,17 @@ export default function StudentDashboard() {
       {/* Recent submissions */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold">最近提交</h2>
+          <h2 className="font-semibold">Recent Submissions</h2>
           <Link
             href="/student/submissions"
             className="text-sm text-blue-600 hover:underline"
           >
-            查看全部
+            View all
           </Link>
         </div>
 
         {recentSubs.length === 0 ? (
-          <p className="text-gray-500 text-sm">还没有提交记录</p>
+          <p className="text-gray-500 text-sm">No submissions yet</p>
         ) : (
           <div className="space-y-2">
             {recentSubs.map((sub) => (
@@ -160,10 +160,10 @@ export default function StudentDashboard() {
               >
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">
-                    {sub.title || sub.assignment_name || '未命名作文'}
+                    {sub.title || sub.assignment_name || 'Untitled'}
                   </span>
                   <span className="text-xs text-gray-400">
-                    {new Date(sub.created_at).toLocaleDateString('zh-CN')}
+                    {new Date(sub.created_at).toLocaleDateString('en-US')}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1 line-clamp-1">
@@ -179,12 +179,12 @@ export default function StudentDashboard() {
       {topErrors.length > 0 && (
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-semibold">我的常见错误</h2>
+            <h2 className="font-semibold">My Common Errors</h2>
             <Link
               href="/student/errors"
               className="text-sm text-blue-600 hover:underline"
             >
-              查看详情
+              View details
             </Link>
           </div>
           <div className="flex flex-wrap gap-2">

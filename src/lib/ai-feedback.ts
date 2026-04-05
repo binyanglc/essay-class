@@ -9,48 +9,51 @@ export async function generateFeedback(
 
   const historyContext =
     errorHistory.length > 0
-      ? `\n\n该学生的历史错误模式（请特别关注反复出现的错误）：\n${errorHistory
+      ? `\n\nThis student's past error patterns (pay special attention to recurring errors):\n${errorHistory
           .slice(0, 8)
-          .map((e) => `- ${e.error_type}: 已出现${e.count}次`)
+          .map((e) => `- ${e.error_type}: appeared ${e.count} times`)
           .join('\n')}`
       : '';
 
-  const prompt = `你是一位专业的中文写作教师。请分析以下中文作文并提供结构化反馈。
+  const prompt = `You are a professional Chinese language writing teacher. Your students are American learners of Chinese. Analyze the following Chinese composition and provide structured feedback.
 
-作文内容：
+IMPORTANT: All explanations, comments, and advice must be in ENGLISH so the student can understand. Chinese text should only appear in the "original" and "revised" fields showing the actual Chinese sentences.
+
+Student's composition:
 ${text}
 ${historyContext}
 
-请以JSON格式返回反馈，严格遵循以下结构：
+Return feedback in the following JSON format:
 {
-  "overall_comment": "整体评价（2-3句话）",
-  "strengths": ["优点1", "优点2"],
-  "main_problems": ["主要问题1", "主要问题2"],
+  "overall_comment": "Overall assessment in English (2-3 sentences)",
+  "strengths": ["Strength 1 in English", "Strength 2 in English"],
+  "main_problems": ["Main problem 1 in English", "Main problem 2 in English"],
   "sentence_revisions": [
     {
-      "original": "原句",
-      "revised": "修改后",
-      "explanation": "修改原因"
+      "original": "Original Chinese sentence",
+      "revised": "Corrected Chinese sentence",
+      "explanation": "Explanation in English of what was wrong and why"
     }
   ],
   "error_tags": [
     {
       "error_type": "vocabulary_word_choice|collocation|grammar_le|grammar_de|word_order|punctuation|coherence_transition|register_style|character_error|other",
-      "original_text": "原文片段",
-      "suggested_revision": "修改建议",
-      "explanation": "解释",
+      "original_text": "Original Chinese text fragment",
+      "suggested_revision": "Corrected Chinese text",
+      "explanation": "Explanation in English",
       "sentence_index": 0
     }
   ],
-  "repeated_error_summary": "对重复出现的错误进行总结和提醒",
-  "next_step_advice": "下一步改进建议"
+  "repeated_error_summary": "Summary in English of recurring errors (if student has error history, explicitly point out repeated patterns)",
+  "next_step_advice": "Advice in English for next steps"
 }
 
-要求：
-1. 只返回有效JSON，不要包含其他文本
-2. error_type只能是规定类型之一
-3. sentence_revisions至少包含2-5个具体修改建议
-4. 如果有历史重复错误，在repeated_error_summary中明确指出`;
+Requirements:
+1. Return valid JSON only, no other text
+2. error_type must be one of the specified types
+3. Include 2-5 specific sentence_revisions
+4. All explanations in ENGLISH, all Chinese text only in original/revised fields
+5. If student has recurring errors, emphasize them in repeated_error_summary`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -63,7 +66,7 @@ ${historyContext}
       messages: [
         {
           role: 'system',
-          content: '你是中文写作教师。只返回JSON，不要有其他内容。',
+          content: 'You are a Chinese writing teacher for American students. Return JSON only, no other content. All explanations must be in English.',
         },
         { role: 'user', content: prompt },
       ],

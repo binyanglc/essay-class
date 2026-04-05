@@ -68,8 +68,8 @@ export default function TeacherStudentDetailPage() {
     setSelectedFeedback(fb);
   };
 
-  if (loading) return <p className="text-gray-500">加载中...</p>;
-  if (!student) return <p className="text-red-500">未找到学生</p>;
+  if (loading) return <p className="text-gray-500">Loading...</p>;
+  if (!student) return <p className="text-red-500">Student not found</p>;
 
   return (
     <div className="space-y-8">
@@ -79,7 +79,7 @@ export default function TeacherStudentDetailPage() {
             href={`/teacher/class/${classId}`}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
-            &larr; 返回班级
+            &larr; Back to class
           </Link>
         )}
         <h1 className="text-2xl font-bold mt-1">
@@ -87,19 +87,17 @@ export default function TeacherStudentDetailPage() {
         </h1>
       </div>
 
-      {/* Error summary */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
-        <ErrorSummary errors={errors} title="该学生的错误统计" />
+        <ErrorSummary errors={errors} title="Student Error Summary" />
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Submission list */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold mb-3">
-            提交列表（{submissions.length}篇）
+            Submissions ({submissions.length})
           </h2>
           {submissions.length === 0 ? (
-            <p className="text-gray-500 text-sm">暂无提交</p>
+            <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {submissions.map((sub) => (
@@ -114,10 +112,10 @@ export default function TeacherStudentDetailPage() {
                 >
                   <div className="flex justify-between">
                     <span className="text-sm font-medium">
-                      {sub.title || sub.assignment_name || '未命名'}
+                      {sub.title || sub.assignment_name || 'Untitled'}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(sub.created_at).toLocaleDateString('zh-CN')}
+                      {new Date(sub.created_at).toLocaleDateString('en-US')}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 line-clamp-1">
@@ -129,14 +127,13 @@ export default function TeacherStudentDetailPage() {
           )}
         </section>
 
-        {/* Selected submission feedback */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           {selectedSub ? (
             <div>
               <h2 className="font-semibold mb-3">
                 {selectedSub.title ||
                   selectedSub.assignment_name ||
-                  '未命名作文'}
+                  'Untitled'}
               </h2>
               <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
                 <p className="whitespace-pre-wrap line-clamp-6">
@@ -146,12 +143,12 @@ export default function TeacherStudentDetailPage() {
               {selectedFeedback ? (
                 <FeedbackView feedback={selectedFeedback} />
               ) : (
-                <p className="text-gray-500 text-sm">无反馈数据</p>
+                <p className="text-gray-500 text-sm">No feedback data</p>
               )}
             </div>
           ) : (
             <p className="text-gray-500 text-sm text-center py-12">
-              点击左侧提交查看详情
+              Click a submission on the left to view details
             </p>
           )}
         </section>

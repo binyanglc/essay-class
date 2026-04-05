@@ -33,7 +33,6 @@ export default function ClassIssuesPage() {
         .single();
       setCls(data);
 
-      // Get unique assignment names
       const { data: subs } = await supabase
         .from('submissions')
         .select('assignment_name')
@@ -83,17 +82,16 @@ export default function ClassIssuesPage() {
           href={`/teacher/class/${id}`}
           className="text-sm text-gray-500 hover:text-gray-700"
         >
-          &larr; 返回班级
+          &larr; Back to class
         </Link>
         <h1 className="text-2xl font-bold mt-1">
-          课堂常见问题 {cls ? `— ${cls.class_name}` : ''}
+          Common Issues {cls ? `— ${cls.class_name}` : ''}
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          可在课堂上直接展示，讲解学生常见错误
+          Use this view in class to explain common student errors
         </p>
       </div>
 
-      {/* Filter buttons */}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => {
@@ -106,7 +104,7 @@ export default function ClassIssuesPage() {
               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
           }`}
         >
-          全部提交
+          All Submissions
         </button>
         <button
           onClick={() => {
@@ -119,7 +117,7 @@ export default function ClassIssuesPage() {
               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
           }`}
         >
-          今日提交
+          Today
         </button>
         {assignments.map((a) => (
           <button
@@ -139,9 +137,8 @@ export default function ClassIssuesPage() {
         ))}
       </div>
 
-      {/* Issues display */}
       {loading ? (
-        <p className="text-gray-500">加载中...</p>
+        <p className="text-gray-500">Loading...</p>
       ) : (
         <ClassIssues errors={errors} totalSubmissions={totalSubmissions} />
       )}

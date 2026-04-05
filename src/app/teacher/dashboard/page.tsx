@@ -48,24 +48,23 @@ export default function TeacherDashboard() {
       setNewClassName('');
       loadClasses();
     } else {
-      setError(data.error || '创建失败');
+      setError(data.error || 'Failed to create class');
     }
     setCreating(false);
   };
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">班级管理</h1>
+      <h1 className="text-2xl font-bold">My Classes</h1>
 
-      {/* Create class */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold mb-3">创建新班级</h2>
+        <h2 className="font-semibold mb-3">Create New Class</h2>
         <div className="flex gap-2">
           <input
             type="text"
             value={newClassName}
             onChange={(e) => setNewClassName(e.target.value)}
-            placeholder="班级名称，例如：中文写作101"
+            placeholder="Class name, e.g. Chinese Writing 101"
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
           />
           <button
@@ -73,17 +72,16 @@ export default function TeacherDashboard() {
             disabled={creating}
             className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
           >
-            {creating ? '创建中...' : '创建班级'}
+            {creating ? 'Creating...' : 'Create Class'}
           </button>
         </div>
         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
       </section>
 
-      {/* Class list */}
       <section>
-        <h2 className="font-semibold mb-4">我的班级</h2>
+        <h2 className="font-semibold mb-4">Class List</h2>
         {classes.length === 0 ? (
-          <p className="text-gray-500 text-sm">还没有创建班级</p>
+          <p className="text-gray-500 text-sm">No classes yet</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {classes.map((cls) => (
@@ -95,7 +93,7 @@ export default function TeacherDashboard() {
                   {cls.class_name}
                 </h3>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-sm text-gray-500">邀请码：</span>
+                  <span className="text-sm text-gray-500">Invite code:</span>
                   <code className="bg-gray-100 px-3 py-1 rounded text-sm font-mono tracking-widest">
                     {cls.invite_code}
                   </code>
@@ -105,14 +103,14 @@ export default function TeacherDashboard() {
                     href={`/teacher/class/${cls.id}`}
                     className="text-sm text-blue-600 hover:underline"
                   >
-                    查看班级
+                    View Class
                   </Link>
                   <span className="text-gray-300">|</span>
                   <Link
                     href={`/teacher/class/${cls.id}/issues`}
                     className="text-sm text-orange-600 hover:underline"
                   >
-                    课堂问题
+                    Common Issues
                   </Link>
                 </div>
               </div>

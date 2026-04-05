@@ -13,16 +13,16 @@ export type ErrorType =
   | 'other';
 
 export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
-  vocabulary_word_choice: '词汇选择',
-  collocation: '搭配',
-  grammar_le: '语法（了）',
-  grammar_de: '语法（的/地/得）',
-  word_order: '语序',
-  punctuation: '标点',
-  coherence_transition: '连贯/过渡',
-  register_style: '语体/风格',
-  character_error: '错别字',
-  other: '其他',
+  vocabulary_word_choice: 'Vocabulary / Word Choice',
+  collocation: 'Collocation',
+  grammar_le: 'Grammar (了)',
+  grammar_de: 'Grammar (的/地/得)',
+  word_order: 'Word Order',
+  punctuation: 'Punctuation',
+  coherence_transition: 'Coherence / Transitions',
+  register_style: 'Register / Style',
+  character_error: 'Character Error',
+  other: 'Other',
 };
 
 export interface Profile {

@@ -30,22 +30,22 @@ export default function SubmissionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) return <p className="text-gray-500">加载中...</p>;
+  if (loading) return <p className="text-gray-500">Loading...</p>;
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">提交历史</h1>
+        <h1 className="text-2xl font-bold">My Submissions</h1>
         <Link
           href="/student/submit"
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
         >
-          新提交
+          New Submission
         </Link>
       </div>
 
       {submissions.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">还没有提交记录</p>
+        <p className="text-gray-500 text-center py-12">No submissions yet</p>
       ) : (
         <div className="space-y-3">
           {submissions.map((sub) => (
@@ -57,14 +57,14 @@ export default function SubmissionsPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-medium text-gray-900">
-                    {sub.title || sub.assignment_name || '未命名作文'}
+                    {sub.title || sub.assignment_name || 'Untitled'}
                   </h3>
                   <p className="text-sm text-gray-500 mt-1 line-clamp-2">
                     {sub.final_text.substring(0, 100)}
                   </p>
                 </div>
                 <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
-                  {new Date(sub.created_at).toLocaleDateString('zh-CN')}
+                  {new Date(sub.created_at).toLocaleDateString('en-US')}
                 </span>
               </div>
               {sub.assignment_name && (

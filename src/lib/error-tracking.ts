@@ -51,10 +51,10 @@ export async function getStudentErrorHistory(
 }
 
 export function categorizeErrorFrequency(count: number): string {
-  if (count >= 5) return '反复出现';
-  if (count >= 3) return '多次出现';
-  if (count >= 2) return '偶尔出现';
-  return '首次出现';
+  if (count >= 5) return 'Recurring';
+  if (count >= 3) return 'Frequent';
+  if (count >= 2) return 'Occasional';
+  return 'First time';
 }
 
 export async function getClassErrorSummary(
@@ -62,16 +62,10 @@ export async function getClassErrorSummary(
   classId: string,
   options?: { since?: string; assignmentName?: string }
 ) {
-  let query = supabase
-    .from('error_tags')
-    .select('error_type, original_text, suggested_revision, explanation, submission_id')
-    .order('created_at', { ascending: false });
-
   if (options?.since) {
-    query = query.gte('created_at', options.since);
+    // filter param used below
   }
 
-  // Filter by class via submissions
   const { data: submissions } = await (() => {
     let q = supabase
       .from('submissions')

@@ -43,8 +43,8 @@ export default function ClassDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (loading) return <p className="text-gray-500">加载中...</p>;
-  if (!cls) return <p className="text-red-500">未找到班级</p>;
+  if (loading) return <p className="text-gray-500">Loading...</p>;
+  if (!cls) return <p className="text-red-500">Class not found</p>;
 
   return (
     <div className="space-y-8">
@@ -54,11 +54,11 @@ export default function ClassDetailPage() {
             href="/teacher/dashboard"
             className="text-sm text-gray-500 hover:text-gray-700"
           >
-            &larr; 返回班级列表
+            &larr; Back to classes
           </Link>
           <h1 className="text-2xl font-bold mt-1">{cls.class_name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm text-gray-500">邀请码：</span>
+            <span className="text-sm text-gray-500">Invite code:</span>
             <code className="bg-gray-100 px-2 py-0.5 rounded text-sm font-mono tracking-widest">
               {cls.invite_code}
             </code>
@@ -68,17 +68,16 @@ export default function ClassDetailPage() {
           href={`/teacher/class/${id}/issues`}
           className="bg-orange-500 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-orange-600 font-medium"
         >
-          课堂常见问题
+          Common Issues
         </Link>
       </div>
 
-      {/* Students */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="font-semibold mb-3">
-          学生列表（{members.length}人）
+          Students ({members.length})
         </h2>
         {members.length === 0 ? (
-          <p className="text-gray-500 text-sm">还没有学生加入</p>
+          <p className="text-gray-500 text-sm">No students have joined yet</p>
         ) : (
           <div className="space-y-2">
             {members.map((m) => {
@@ -90,9 +89,9 @@ export default function ClassDetailPage() {
                   className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-50 border border-gray-100"
                 >
                   <span className="text-sm font-medium">
-                    {profile?.name || profile?.email || '未知'}
+                    {profile?.name || profile?.email || 'Unknown'}
                   </span>
-                  <span className="text-xs text-blue-600">查看详情 &rarr;</span>
+                  <span className="text-xs text-blue-600">View &rarr;</span>
                 </Link>
               );
             })}
@@ -100,11 +99,10 @@ export default function ClassDetailPage() {
         )}
       </section>
 
-      {/* Recent submissions */}
       <section className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold mb-3">最近提交</h2>
+        <h2 className="font-semibold mb-3">Recent Submissions</h2>
         {submissions.length === 0 ? (
-          <p className="text-gray-500 text-sm">暂无提交</p>
+          <p className="text-gray-500 text-sm">No submissions yet</p>
         ) : (
           <div className="space-y-2">
             {submissions.map((sub) => {
@@ -118,15 +116,15 @@ export default function ClassDetailPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="text-sm font-medium">
-                        {profile?.name || '未知'}
+                        {profile?.name || 'Unknown'}
                       </span>
                       <span className="text-gray-400 mx-2">&middot;</span>
                       <span className="text-sm text-gray-600">
-                        {sub.title || sub.assignment_name || '未命名'}
+                        {sub.title || sub.assignment_name || 'Untitled'}
                       </span>
                     </div>
                     <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
-                      {new Date(sub.created_at).toLocaleDateString('zh-CN')}
+                      {new Date(sub.created_at).toLocaleDateString('en-US')}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 line-clamp-1">

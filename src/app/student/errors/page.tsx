@@ -26,19 +26,19 @@ export default function StudentErrorsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) return <p className="text-gray-500">加载中...</p>;
+  if (loading) return <p className="text-gray-500">Loading...</p>;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">我的常见错误</h1>
+      <h1 className="text-2xl font-bold mb-6">My Error Patterns</h1>
 
       {errors.length === 0 ? (
         <p className="text-gray-500 text-center py-12">
-          提交更多作文后，这里会显示你的常见错误类型统计
+          Submit more compositions and your error pattern statistics will appear here.
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <ErrorSummary errors={errors} title="所有提交中的错误分布" />
+          <ErrorSummary errors={errors} title="Error Distribution Across All Submissions" />
         </div>
       )}
     </div>

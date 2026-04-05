@@ -39,12 +39,12 @@ export default function Navbar() {
   const isTeacher = profile?.role === 'teacher';
 
   const links = isTeacher
-    ? [{ href: '/teacher/dashboard', label: '班级管理' }]
+    ? [{ href: '/teacher/dashboard', label: 'My Classes' }]
     : [
-        { href: '/student/dashboard', label: '我的主页' },
-        { href: '/student/submit', label: '提交作文' },
-        { href: '/student/submissions', label: '历史提交' },
-        { href: '/student/errors', label: '常见错误' },
+        { href: '/student/dashboard', label: 'Dashboard' },
+        { href: '/student/submit', label: 'New Submission' },
+        { href: '/student/submissions', label: 'My Submissions' },
+        { href: '/student/errors', label: 'Error Patterns' },
       ];
 
   return (
@@ -55,7 +55,7 @@ export default function Navbar() {
             href={isTeacher ? '/teacher/dashboard' : '/student/dashboard'}
             className="font-semibold text-lg text-gray-900"
           >
-            写作反馈
+            Writing Feedback
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
@@ -79,7 +79,7 @@ export default function Navbar() {
               onClick={handleLogout}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
-              退出
+              Log Out
             </button>
           </div>
 
@@ -132,7 +132,7 @@ export default function Navbar() {
               onClick={handleLogout}
               className="block py-2.5 text-sm text-gray-500"
             >
-              退出登录
+              Log Out
             </button>
           </div>
         )}

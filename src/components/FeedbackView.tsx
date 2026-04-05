@@ -11,7 +11,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="font-semibold text-gray-900 mb-2">整体评价</h3>
+        <h3 className="font-semibold text-gray-900 mb-2">Overall Assessment</h3>
         <p className="text-gray-700 bg-blue-50 p-4 rounded-lg">
           {feedback.overall_comment}
         </p>
@@ -19,7 +19,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
       {feedback.strengths && feedback.strengths.length > 0 && (
         <section>
-          <h3 className="font-semibold text-green-700 mb-2">优点</h3>
+          <h3 className="font-semibold text-green-700 mb-2">Strengths</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-700">
             {feedback.strengths.map((s, i) => (
               <li key={i}>{s}</li>
@@ -30,7 +30,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
       {feedback.main_problems && feedback.main_problems.length > 0 && (
         <section>
-          <h3 className="font-semibold text-red-700 mb-2">主要问题</h3>
+          <h3 className="font-semibold text-red-700 mb-2">Main Issues</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-700">
             {feedback.main_problems.map((p, i) => (
               <li key={i}>{p}</li>
@@ -42,7 +42,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
       {feedback.sentence_revisions &&
         feedback.sentence_revisions.length > 0 && (
           <section>
-            <h3 className="font-semibold text-gray-900 mb-3">句子修改建议</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Sentence Corrections</h3>
             <div className="space-y-3">
               {feedback.sentence_revisions.map((rev, i) => (
                 <div
@@ -68,7 +68,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
       {errorTags && errorTags.length > 0 && (
         <section>
-          <h3 className="font-semibold text-gray-900 mb-2">错误类型标记</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">Error Types</h3>
           <div className="flex flex-wrap gap-2">
             {[...new Set(errorTags.map((t) => t.error_type))].map((type) => {
               const count = errorTags.filter(
@@ -89,7 +89,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
       {feedback.repeated_error_summary && (
         <section>
-          <h3 className="font-semibold text-amber-700 mb-2">重复错误提醒</h3>
+          <h3 className="font-semibold text-amber-700 mb-2">Recurring Error Alert</h3>
           <p className="text-gray-700 bg-amber-50 p-4 rounded-lg border border-amber-100">
             {feedback.repeated_error_summary}
           </p>
@@ -98,7 +98,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
 
       {feedback.next_step_advice && (
         <section>
-          <h3 className="font-semibold text-gray-900 mb-2">下一步建议</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">Next Steps</h3>
           <p className="text-gray-700 bg-green-50 p-4 rounded-lg">
             {feedback.next_step_advice}
           </p>
