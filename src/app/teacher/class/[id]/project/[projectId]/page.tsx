@@ -5,13 +5,18 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Project, Submission, Feedback, ErrorTag, Profile, ErrorType } from '@/types';
-import FeedbackView from '@/components/FeedbackView';
 import ClassIssues from '@/components/ClassIssues';
 
 interface ClassError {
   error_type: ErrorType;
   count: number;
   examples: { original: string; revision: string; explanation: string }[];
+}
+
+interface SentenceRevision {
+  original: string;
+  revised: string;
+  explanation: string;
 }
 
 export default function ProjectDetailPage() {
@@ -22,6 +27,7 @@ export default function ProjectDetailPage() {
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [selectedTags, setSelectedTags] = useState<ErrorTag[]>([]);
   const [editing, setEditing] = useState<Record<string, string>>({});
+  const [editingRevisions, setEditingRevisions] = useState<SentenceRevision[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [issues, setIssues] = useState<ClassError[]>([]);
   const [issueCount, setIssueCount] = useState(0);
@@ -49,7 +55,6 @@ export default function ProjectDetailPage() {
       .order('created_at', { ascending: false });
     setSubmissions(subs || []);
 
-    // Load common issues for this project
     const res = await fetch(
       `/api/teacher/issues?classId=${classId}&projectId=${projectId}`
     );
@@ -63,6 +68,7 @@ export default function ProjectDetailPage() {
   const handleSelectSubmission = async (sub: Submission) => {
     setSelectedSub(sub);
     setEditing({});
+    setEditingRevisions(null);
 
     const { data: fb } = await supabase
       .from('feedback')
@@ -83,24 +89,34 @@ export default function ProjectDetailPage() {
   };
 
   const handleSaveEdits = async () => {
-    if (!selectedFeedback || Object.keys(editing).length === 0) return;
+    if (!selectedFeedback) return;
+    const hasTextEdits = Object.keys(editing).length > 0;
+    const hasRevisionEdits = editingRevisions !== null;
+    if (!hasTextEdits && !hasRevisionEdits) return;
+
     setSaving(true);
+
+    const body: Record<string, unknown> = { ...editing };
+    if (hasRevisionEdits) {
+      body.sentence_revisions = editingRevisions;
+    }
 
     const res = await fetch(`/api/feedback/${selectedFeedback.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editing),
+      body: JSON.stringify(body),
     });
 
     if (res.ok) {
       const updated = await res.json();
       setSelectedFeedback(updated);
       setEditing({});
+      setEditingRevisions(null);
     }
     setSaving(false);
   };
 
-  const hasEdits = Object.keys(editing).length > 0;
+  const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null;
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!project) return <p className="text-red-500">Project not found</p>;
@@ -120,7 +136,6 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {/* Common Issues toggle */}
       <div>
         <button
           onClick={() => setShowIssues(!showIssues)}
@@ -136,7 +151,6 @@ export default function ProjectDetailPage() {
         </section>
       )}
 
-      {/* Submissions + Feedback */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold mb-3">
@@ -212,7 +226,9 @@ export default function ProjectDetailPage() {
                     feedback={selectedFeedback}
                     errorTags={selectedTags}
                     editing={editing}
+                    editingRevisions={editingRevisions}
                     onEdit={handleEditField}
+                    onEditRevisions={setEditingRevisions}
                   />
                 </div>
               ) : (
@@ -234,13 +250,28 @@ function EditableFeedback({
   feedback,
   errorTags,
   editing,
+  editingRevisions,
   onEdit,
+  onEditRevisions,
 }: {
   feedback: Feedback;
   errorTags: ErrorTag[];
   editing: Record<string, string>;
+  editingRevisions: SentenceRevision[] | null;
   onEdit: (field: string, value: string) => void;
+  onEditRevisions: (revisions: SentenceRevision[] | null) => void;
 }) {
+  const groupedErrors = new Map<ErrorType, ErrorTag[]>();
+  for (const tag of errorTags) {
+    const list = groupedErrors.get(tag.error_type as ErrorType) || [];
+    list.push(tag);
+    groupedErrors.set(tag.error_type as ErrorType, list);
+  }
+
+  const characterErrors = groupedErrors.get('characters') || [];
+  const vocabErrors = groupedErrors.get('vocabulary') || [];
+  const grammarErrors = groupedErrors.get('grammar') || [];
+
   const editableFields = [
     { key: 'overall_comment', label: 'Overall Assessment', value: feedback.overall_comment },
     { key: 'characters_comment', label: 'Characters', value: feedback.characters_comment },
@@ -250,58 +281,258 @@ function EditableFeedback({
     { key: 'structure_feedback', label: 'Organization & Structure', value: feedback.structure_feedback },
   ];
 
+  const revisions: SentenceRevision[] = editingRevisions ?? feedback.sentence_revisions ?? [];
+  const isEditingRevisions = editingRevisions !== null;
+
+  const startEditingRevisions = () => {
+    onEditRevisions([...(feedback.sentence_revisions || [])]);
+  };
+
+  const updateRevision = (index: number, field: keyof SentenceRevision, value: string) => {
+    if (!editingRevisions) return;
+    const updated = [...editingRevisions];
+    updated[index] = { ...updated[index], [field]: value };
+    onEditRevisions(updated);
+  };
+
+  const deleteRevision = (index: number) => {
+    if (!editingRevisions) return;
+    onEditRevisions(editingRevisions.filter((_, i) => i !== index));
+  };
+
+  const addRevision = () => {
+    const current = editingRevisions || [...(feedback.sentence_revisions || [])];
+    onEditRevisions([...current, { original: '', revised: '', explanation: '' }]);
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Sentence corrections (read-only) */}
-      {feedback.sentence_revisions && feedback.sentence_revisions.length > 0 && (
-        <section>
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Sentence Corrections</h4>
-          <div className="space-y-2">
-            {feedback.sentence_revisions.map((rev, i) => (
-              <div key={i} className="bg-gray-50 p-2 rounded text-xs">
-                <span className="text-red-600 line-through">{rev.original}</span>
-                <span className="text-green-700 ml-1">&rarr; {rev.revised}</span>
-              </div>
+    <div className="space-y-5">
+      {/* Editable text fields: Overall */}
+      <EditableTextField
+        fieldKey="overall_comment"
+        label="Overall Assessment"
+        value={feedback.overall_comment}
+        editing={editing}
+        onEdit={onEdit}
+      />
+
+      {/* Sentence Corrections — full view with edit capability */}
+      <section>
+        <div className="flex justify-between items-center mb-2">
+          <h4 className="text-sm font-semibold text-gray-700">Sentence Corrections</h4>
+          {!isEditingRevisions ? (
+            <button
+              onClick={startEditingRevisions}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Edit
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-orange-600">Editing</span>
+              <button
+                onClick={addRevision}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                + Add
+              </button>
+            </div>
+          )}
+        </div>
+
+        {revisions.length === 0 ? (
+          <p className="text-sm text-gray-400 italic">No sentence corrections</p>
+        ) : (
+          <div className="space-y-3">
+            {revisions.map((rev, i) =>
+              isEditingRevisions ? (
+                <div key={i} className="bg-blue-50 p-3 rounded-lg border border-blue-200 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs text-gray-500 font-medium">#{i + 1}</span>
+                    <button
+                      onClick={() => deleteRevision(i)}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Original</label>
+                    <textarea
+                      value={rev.original}
+                      onChange={(e) => updateRevision(i, 'original', e.target.value)}
+                      rows={2}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Revised</label>
+                    <textarea
+                      value={rev.revised}
+                      onChange={(e) => updateRevision(i, 'revised', e.target.value)}
+                      rows={2}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Explanation</label>
+                    <textarea
+                      value={rev.explanation}
+                      onChange={(e) => updateRevision(i, 'explanation', e.target.value)}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <div className="text-sm">
+                    <span className="text-red-600 line-through">{rev.original}</span>
+                  </div>
+                  <div className="text-sm mt-1">
+                    <span className="text-green-700">&rarr; {rev.revised}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">{rev.explanation}</p>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Characters with error tags */}
+      <section>
+        <EditableTextField
+          fieldKey="characters_comment"
+          label="Characters"
+          value={feedback.characters_comment}
+          editing={editing}
+          onEdit={onEdit}
+        />
+        {characterErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
+            {characterErrors.map((tag, i) => (
+              <ErrorTagCard key={i} tag={tag} />
             ))}
           </div>
-        </section>
+        )}
+      </section>
+
+      {/* Vocabulary */}
+      <section>
+        <EditableTextField
+          fieldKey="vocabulary_comment"
+          label="Vocabulary & Word Choice"
+          value={feedback.vocabulary_comment}
+          editing={editing}
+          onEdit={onEdit}
+        />
+        {vocabErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
+            {vocabErrors.map((tag, i) => (
+              <ErrorTagCard key={i} tag={tag} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Grammar */}
+      <section>
+        <EditableTextField
+          fieldKey="grammar_comment"
+          label="Grammar"
+          value={feedback.grammar_comment}
+          editing={editing}
+          onEdit={onEdit}
+        />
+        {grammarErrors.length > 0 && (
+          <div className="space-y-2 mt-2">
+            {grammarErrors.map((tag, i) => (
+              <ErrorTagCard key={i} tag={tag} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Content & Ideas */}
+      <EditableTextField
+        fieldKey="content_feedback"
+        label="Content & Ideas"
+        value={feedback.content_feedback}
+        editing={editing}
+        onEdit={onEdit}
+      />
+
+      {/* Organization & Structure */}
+      <EditableTextField
+        fieldKey="structure_feedback"
+        label="Organization & Structure"
+        value={feedback.structure_feedback}
+        editing={editing}
+        onEdit={onEdit}
+      />
+    </div>
+  );
+}
+
+function EditableTextField({
+  fieldKey,
+  label,
+  value,
+  editing,
+  onEdit,
+}: {
+  fieldKey: string;
+  label: string;
+  value?: string;
+  editing: Record<string, string>;
+  onEdit: (field: string, value: string) => void;
+}) {
+  const isEditing = fieldKey in editing;
+  const displayValue = isEditing ? editing[fieldKey] : (value || '');
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <h4 className="text-sm font-semibold text-gray-700">{label}</h4>
+        {!isEditing ? (
+          <button
+            onClick={() => onEdit(fieldKey, displayValue)}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Edit
+          </button>
+        ) : (
+          <span className="text-xs text-orange-600">Editing</span>
+        )}
+      </div>
+      {isEditing ? (
+        <textarea
+          value={editing[fieldKey]}
+          onChange={(e) => onEdit(fieldKey, e.target.value)}
+          rows={3}
+          className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+        />
+      ) : (
+        <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+          {displayValue || <span className="text-gray-400 italic">No feedback</span>}
+        </p>
       )}
+    </div>
+  );
+}
 
-      {/* Editable text fields */}
-      {editableFields.map(({ key, label, value }) => {
-        const isEditing = key in editing;
-        const displayValue = isEditing ? editing[key] : (value || '');
-
-        return (
-          <section key={key}>
-            <div className="flex justify-between items-center mb-1">
-              <h4 className="text-sm font-semibold text-gray-700">{label}</h4>
-              {!isEditing ? (
-                <button
-                  onClick={() => onEdit(key, displayValue)}
-                  className="text-xs text-blue-600 hover:underline"
-                >
-                  Edit
-                </button>
-              ) : (
-                <span className="text-xs text-orange-600">Editing</span>
-              )}
-            </div>
-            {isEditing ? (
-              <textarea
-                value={editing[key]}
-                onChange={(e) => onEdit(key, e.target.value)}
-                rows={3}
-                className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-              />
-            ) : (
-              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
-                {displayValue || <span className="text-gray-400 italic">No feedback</span>}
-              </p>
-            )}
-          </section>
-        );
-      })}
+function ErrorTagCard({ tag }: { tag: ErrorTag }) {
+  return (
+    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+      {tag.pattern_name && (
+        <span className="text-xs text-blue-600 font-medium">{tag.pattern_name}</span>
+      )}
+      <div className="text-sm mt-1">
+        <span className="text-red-600 line-through">{tag.original_text}</span>
+        <span className="text-green-700 ml-2">&rarr; {tag.suggested_revision}</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1">{tag.explanation}</p>
     </div>
   );
 }

@@ -18,7 +18,7 @@ export async function PUT(
     const { id } = await params;
     const updates = await request.json();
 
-    const allowedFields = [
+    const textFields = [
       'overall_comment',
       'characters_comment',
       'vocabulary_comment',
@@ -27,11 +27,15 @@ export async function PUT(
       'structure_feedback',
     ];
 
-    const safeUpdates: Record<string, string> = {};
-    for (const key of allowedFields) {
+    const safeUpdates: Record<string, unknown> = {};
+    for (const key of textFields) {
       if (key in updates) {
         safeUpdates[key] = updates[key];
       }
+    }
+
+    if ('sentence_revisions' in updates && Array.isArray(updates.sentence_revisions)) {
+      safeUpdates.sentence_revisions = updates.sentence_revisions;
     }
 
     if (Object.keys(safeUpdates).length === 0) {

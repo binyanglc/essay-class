@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Profile, Submission, Feedback, ErrorFrequency } from '@/types';
+import { Profile, Submission, Feedback, ErrorTag, ErrorFrequency, ErrorType } from '@/types';
 import { getStudentErrorHistory } from '@/lib/error-tracking';
 import ErrorSummary from '@/components/ErrorSummary';
 import FeedbackView from '@/components/FeedbackView';
@@ -17,9 +17,8 @@ export default function TeacherStudentDetailPage() {
   const [student, setStudent] = useState<Profile | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
-  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(
-    null
-  );
+  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
+  const [selectedTags, setSelectedTags] = useState<ErrorTag[]>([]);
   const [errors, setErrors] = useState<ErrorFrequency[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
@@ -66,6 +65,12 @@ export default function TeacherStudentDetailPage() {
       .eq('submission_id', sub.id)
       .single();
     setSelectedFeedback(fb);
+
+    const { data: tags } = await supabase
+      .from('error_tags')
+      .select('*')
+      .eq('submission_id', sub.id);
+    setSelectedTags(tags || []);
   };
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
@@ -141,7 +146,7 @@ export default function TeacherStudentDetailPage() {
                 </p>
               </div>
               {selectedFeedback ? (
-                <FeedbackView feedback={selectedFeedback} />
+                <FeedbackView feedback={selectedFeedback} errorTags={selectedTags} />
               ) : (
                 <p className="text-gray-500 text-sm">No feedback data</p>
               )}
