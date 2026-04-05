@@ -100,24 +100,22 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
       </section>
 
       {/* Content & Ideas */}
-      {feedback.content_feedback && feedback.content_feedback.trim() !== '' && (
-        <section>
-          <h3 className="font-semibold text-purple-700 mb-2">Content & Ideas</h3>
-          <p className="text-gray-700 bg-purple-50 p-4 rounded-lg border border-purple-100">
-            {feedback.content_feedback}
-          </p>
-        </section>
-      )}
+      <section>
+        <h3 className="font-semibold text-gray-900 mb-2">Content & Ideas</h3>
+        <SectionComment
+          comment={feedback.content_feedback}
+          hasErrors={false}
+        />
+      </section>
 
       {/* Organization & Structure */}
-      {feedback.structure_feedback && feedback.structure_feedback.trim() !== '' && (
-        <section>
-          <h3 className="font-semibold text-indigo-700 mb-2">Organization & Structure</h3>
-          <p className="text-gray-700 bg-indigo-50 p-4 rounded-lg border border-indigo-100">
-            {feedback.structure_feedback}
-          </p>
-        </section>
-      )}
+      <section>
+        <h3 className="font-semibold text-gray-900 mb-2">Organization & Structure</h3>
+        <SectionComment
+          comment={feedback.structure_feedback}
+          hasErrors={false}
+        />
+      </section>
     </div>
   );
 }
