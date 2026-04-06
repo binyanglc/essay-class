@@ -47,6 +47,9 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        <p className="text-center font-semibold text-lg mb-2">
+          <span className="text-blue-600">XIE</span> Writing Lab
+        </p>
         <h1 className="text-2xl font-bold text-center mb-8">Sign Up</h1>
 
         <form onSubmit={handleSignup} className="space-y-4">

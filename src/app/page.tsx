@@ -25,7 +25,9 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <header className="border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 h-14 flex justify-between items-center">
-          <span className="font-semibold text-lg">Chinese Writing Class</span>
+          <span className="font-semibold text-lg">
+            <span className="text-blue-600">XIE</span> Writing Lab
+          </span>
           <Link
             href="/login"
             className="text-sm text-gray-600 hover:text-gray-900"
@@ -37,11 +39,12 @@ export default function LandingPage() {
 
       <main className="flex-1 flex flex-col justify-center px-4 py-10">
         <div className="max-w-lg mx-auto w-full">
+          <p className="text-blue-600 font-medium text-sm mb-2 text-center sm:text-left">XIE Chinese Writing Lab</p>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 text-center sm:text-left">
             Get instant feedback on your Chinese writing
           </h1>
           <p className="text-gray-500 text-sm mb-8 text-center sm:text-left">
-            Type or photograph your composition. AI gives you sentence-level corrections in seconds.
+            Type or photograph your composition. AI gives you sentence-level corrections with detailed explanations — in seconds.
           </p>
 
           <div className="space-y-2.5">
@@ -94,6 +97,16 @@ export default function LandingPage() {
           </div>
         </div>
       </main>
+
+      <footer className="border-t border-gray-100 py-6 px-4">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-gray-400">
+          <span>&copy; {new Date().getFullYear()} XIE Chinese Writing Lab</span>
+          <div className="flex gap-4">
+            <Link href="/privacy" className="hover:text-gray-600">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-gray-600">Terms of Service</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -113,7 +113,7 @@ export default function Navbar() {
             href={isTeacher ? '/teacher/dashboard' : '/student/dashboard'}
             className="font-semibold text-lg text-gray-900 flex-shrink-0"
           >
-            Chinese Writing Class
+            <span className="text-blue-600">XIE</span> Writing Lab
           </Link>
 
           {/* Desktop nav */}

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chinese Writing Class",
-  description: "AI-powered feedback for Chinese writing",
+  title: "XIE Chinese Writing Lab",
+  description: "AI-powered feedback for Chinese writing — by XIE",
 };
 
 export default function RootLayout({

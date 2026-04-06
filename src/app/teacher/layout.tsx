@@ -1,4 +1,5 @@
 import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 
 export default function TeacherLayout({
   children,
@@ -11,6 +12,7 @@ export default function TeacherLayout({
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
         {children}
       </main>
+      <Footer />
     </>
   );
 }
