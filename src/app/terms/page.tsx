@@ -100,7 +100,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">10. Contact</h2>
             <p>
-              For questions about these Terms, contact us at: <strong>support@xielab.com</strong>
+              For questions about these Terms, contact us at: <strong>binyanglc@gmail.com</strong>
             </p>
           </section>
         </div>
