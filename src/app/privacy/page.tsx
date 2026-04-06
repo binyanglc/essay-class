@@ -19,7 +19,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">1. Introduction</h2>
             <p>
-              XIE Chinese Writing Lab (&quot;XIE,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the website at xielab.us (the &quot;Service&quot;).
+              XIE Chinese Writing Lab (&quot;XIE,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the website at xielabai.com (the &quot;Service&quot;).
               This Privacy Policy explains how we collect, use, and protect your personal information when you use our Service.
             </p>
           </section>
