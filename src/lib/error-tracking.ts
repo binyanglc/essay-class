@@ -121,14 +121,14 @@ export async function getClassErrorSummary(
 
   const { data: errorTags } = await supabase
     .from('error_tags')
-    .select('error_type, original_text, suggested_revision, explanation')
+    .select('id, error_type, original_text, suggested_revision, explanation')
     .in('submission_id', submissionIds);
 
   if (!errorTags) return { errorTypes: [], totalSubmissions: submissions.length };
 
   const typeMap = new Map<
     string,
-    { count: number; examples: { original: string; revision: string; explanation: string }[] }
+    { count: number; examples: { id: string; original: string; revision: string; explanation: string }[] }
   >();
 
   for (const tag of errorTags) {
@@ -137,6 +137,7 @@ export async function getClassErrorSummary(
       existing.count++;
       if (existing.examples.length < 5) {
         existing.examples.push({
+          id: tag.id,
           original: tag.original_text || '',
           revision: tag.suggested_revision || '',
           explanation: tag.explanation || '',
@@ -146,6 +147,7 @@ export async function getClassErrorSummary(
       typeMap.set(tag.error_type, {
         count: 1,
         examples: [{
+          id: tag.id,
           original: tag.original_text || '',
           revision: tag.suggested_revision || '',
           explanation: tag.explanation || '',

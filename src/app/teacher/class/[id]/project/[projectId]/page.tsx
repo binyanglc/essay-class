@@ -10,7 +10,7 @@ import ClassIssues from '@/components/ClassIssues';
 interface ClassError {
   error_type: ErrorType;
   count: number;
-  examples: { original: string; revision: string; explanation: string }[];
+  examples: { id: string; original: string; revision: string; explanation: string }[];
 }
 
 interface SentenceRevision {
@@ -261,7 +261,7 @@ export default function ProjectDetailPage() {
 
       {showIssues && (
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <ClassIssues errors={issues} totalSubmissions={issueCount} />
+          <ClassIssues errors={issues} totalSubmissions={issueCount} onRefresh={loadData} />
         </section>
       )}
 

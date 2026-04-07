@@ -10,7 +10,7 @@ import ClassIssues from '@/components/ClassIssues';
 interface ClassError {
   error_type: ErrorType;
   count: number;
-  examples: { original: string; revision: string; explanation: string }[];
+  examples: { id: string; original: string; revision: string; explanation: string }[];
 }
 
 export default function ClassIssuesPage() {
@@ -140,7 +140,7 @@ export default function ClassIssuesPage() {
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : (
-        <ClassIssues errors={errors} totalSubmissions={totalSubmissions} />
+        <ClassIssues errors={errors} totalSubmissions={totalSubmissions} onRefresh={loadIssues} />
       )}
     </div>
   );
