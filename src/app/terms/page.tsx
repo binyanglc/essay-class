@@ -6,7 +6,7 @@ export default function TermsOfService() {
       <header className="border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center">
           <Link href="/" className="font-semibold text-lg">
-            <span className="text-blue-600">XIE</span> Writing Lab
+            <span className="text-blue-600">ai</span>XIE Writing Lab
           </Link>
         </div>
       </header>
@@ -19,7 +19,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using XIE Chinese Writing Lab (&quot;the Service&quot;), you agree to be bound by these Terms of Service.
+              By accessing or using aiXIE Writing Lab (&quot;the Service&quot;), you agree to be bound by these Terms of Service.
               If you do not agree to these terms, please do not use the Service.
             </p>
           </section>
@@ -27,7 +27,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">2. Description of Service</h2>
             <p>
-              XIE Chinese Writing Lab provides AI-powered feedback on Chinese language writing compositions.
+              aiXIE Writing Lab provides AI-powered feedback on Chinese language writing compositions.
               The Service includes text submission, image upload with OCR, AI analysis, error tracking, and classroom management features.
             </p>
           </section>
@@ -68,7 +68,7 @@ export default function TermsOfService() {
             <p>
               You retain ownership of the compositions you submit. By using the Service, you grant us a limited license
               to process your compositions through our AI system for the purpose of providing feedback.
-              The Service itself, including its design, code, and AI systems, is owned by XIE Chinese Writing Lab.
+              The Service itself, including its design, code, and AI systems, is owned by aiXIE Writing Lab.
             </p>
           </section>
 

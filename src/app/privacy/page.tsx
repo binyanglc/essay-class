@@ -6,7 +6,7 @@ export default function PrivacyPolicy() {
       <header className="border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center">
           <Link href="/" className="font-semibold text-lg">
-            <span className="text-blue-600">XIE</span> Writing Lab
+            <span className="text-blue-600">ai</span>XIE Writing Lab
           </Link>
         </div>
       </header>
@@ -19,7 +19,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">1. Introduction</h2>
             <p>
-              XIE Chinese Writing Lab (&quot;XIE,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the website at xielabai.com (the &quot;Service&quot;).
+              aiXIE Writing Lab (&quot;aiXIE,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the website at aixielab.com (the &quot;Service&quot;).
               This Privacy Policy explains how we collect, use, and protect your personal information when you use our Service.
             </p>
           </section>
