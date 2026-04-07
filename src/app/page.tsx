@@ -69,7 +69,7 @@ export default function LandingPage() {
               className="w-full text-gray-500 py-2.5 text-sm hover:text-gray-700 transition-colors disabled:opacity-50"
             >
               {loading ? 'Entering...' : (
-                <>or continue as guest — <span className="underline">no sign up needed</span></>
+                <>or <span className="underline">continue as guest</span> — no sign up needed</>
               )}
             </button>
           </div>
