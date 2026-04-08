@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Project, Submission, Feedback, ErrorTag, Profile, ErrorType } from '@/types';
+import { Project, Submission, Feedback, ErrorTag, Profile, ErrorType, FeedbackComment } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
+import TeacherCommentThread from '@/components/TeacherCommentThread';
 
 interface ClassError {
   error_type: ErrorType;
@@ -37,6 +38,7 @@ export default function ProjectDetailPage() {
   const [projNameDraft, setProjNameDraft] = useState('');
   const [projDescDraft, setProjDescDraft] = useState('');
   const [projDueDraft, setProjDueDraft] = useState('');
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -67,8 +69,29 @@ export default function ProjectDetailPage() {
     setIssues(issueData.errorTypes || []);
     setIssueCount(issueData.totalSubmissions || 0);
 
+    if (subs && subs.length > 0) {
+      const counts: Record<string, number> = {};
+      for (const sub of subs) {
+        const { data: fb } = await supabase
+          .from('feedback')
+          .select('id')
+          .eq('submission_id', sub.id)
+          .single();
+        if (fb) {
+          const { count } = await supabase
+            .from('feedback_comments')
+            .select('id', { count: 'exact', head: true })
+            .eq('feedback_id', fb.id);
+          if (count && count > 0) counts[sub.id] = count;
+        }
+      }
+      setCommentCounts(counts);
+    }
+
     setLoading(false);
   }
+
+  const [selectedComments, setSelectedComments] = useState<FeedbackComment[]>([]);
 
   const handleSelectSubmission = async (sub: Submission) => {
     setSelectedSub(sub);
@@ -87,6 +110,20 @@ export default function ProjectDetailPage() {
       .select('*')
       .eq('submission_id', sub.id);
     setSelectedTags(tags || []);
+
+    if (fb) {
+      loadCommentsForFeedback(fb.id);
+    } else {
+      setSelectedComments([]);
+    }
+  };
+
+  const loadCommentsForFeedback = async (feedbackId: string) => {
+    const res = await fetch(`/api/feedback/${feedbackId}/comments`);
+    if (res.ok) {
+      const data = await res.json();
+      setSelectedComments(data);
+    }
   };
 
   const handleEditField = (field: string, value: string) => {
@@ -293,6 +330,11 @@ export default function ProjectDetailPage() {
                         <div className="flex justify-between">
                           <span className="text-sm font-medium">
                             {profile?.name || 'Unknown'}
+                            {commentCounts[sub.id] > 0 && (
+                              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
+                                {commentCounts[sub.id]}
+                              </span>
+                            )}
                           </span>
                           <span className="text-xs text-gray-400">
                             {new Date(sub.created_at).toLocaleDateString('en-US')}
@@ -356,6 +398,8 @@ export default function ProjectDetailPage() {
                     editingRevisions={editingRevisions}
                     onEdit={handleEditField}
                     onEditRevisions={setEditingRevisions}
+                    comments={selectedComments}
+                    onRefreshComments={() => loadCommentsForFeedback(selectedFeedback.id)}
                   />
                 </div>
               ) : (
@@ -380,6 +424,8 @@ function EditableFeedback({
   editingRevisions,
   onEdit,
   onEditRevisions,
+  comments,
+  onRefreshComments,
 }: {
   feedback: Feedback;
   errorTags: ErrorTag[];
@@ -387,6 +433,8 @@ function EditableFeedback({
   editingRevisions: SentenceRevision[] | null;
   onEdit: (field: string, value: string) => void;
   onEditRevisions: (revisions: SentenceRevision[] | null) => void;
+  comments: FeedbackComment[];
+  onRefreshComments: () => void;
 }) {
   const groupedErrors = new Map<ErrorType, ErrorTag[]>();
   for (const tag of errorTags) {
@@ -442,6 +490,7 @@ function EditableFeedback({
         editing={editing}
         onEdit={onEdit}
       />
+      <TeacherCommentThread feedbackId={feedback.id} section="overall" comments={comments} onRefresh={onRefreshComments} />
 
       {/* Sentence Corrections — full view with edit capability */}
       <section>
@@ -512,14 +561,17 @@ function EditableFeedback({
                   </div>
                 </div>
               ) : (
-                <div key={i} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                  <div className="text-sm">
-                    <span className="text-red-600 line-through">{rev.original}</span>
+                <div key={i}>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                    <div className="text-sm">
+                      <span className="text-red-600 line-through">{rev.original}</span>
+                    </div>
+                    <div className="text-sm mt-1">
+                      <span className="text-green-700">&rarr; {rev.revised}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">{rev.explanation}</p>
                   </div>
-                  <div className="text-sm mt-1">
-                    <span className="text-green-700">&rarr; {rev.revised}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">{rev.explanation}</p>
+                  <TeacherCommentThread feedbackId={feedback.id} section={`sentence_${i}`} comments={comments} onRefresh={onRefreshComments} />
                 </div>
               )
             )}
@@ -543,6 +595,7 @@ function EditableFeedback({
             ))}
           </div>
         )}
+        <TeacherCommentThread feedbackId={feedback.id} section="characters" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
       {/* Vocabulary */}
@@ -561,6 +614,7 @@ function EditableFeedback({
             ))}
           </div>
         )}
+        <TeacherCommentThread feedbackId={feedback.id} section="vocabulary" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
       {/* Grammar */}
@@ -579,25 +633,32 @@ function EditableFeedback({
             ))}
           </div>
         )}
+        <TeacherCommentThread feedbackId={feedback.id} section="grammar" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
       {/* Content & Ideas */}
-      <EditableTextField
-        fieldKey="content_feedback"
-        label="Content & Ideas"
-        value={feedback.content_feedback}
-        editing={editing}
-        onEdit={onEdit}
-      />
+      <div>
+        <EditableTextField
+          fieldKey="content_feedback"
+          label="Content & Ideas"
+          value={feedback.content_feedback}
+          editing={editing}
+          onEdit={onEdit}
+        />
+        <TeacherCommentThread feedbackId={feedback.id} section="content" comments={comments} onRefresh={onRefreshComments} />
+      </div>
 
       {/* Organization & Structure */}
-      <EditableTextField
-        fieldKey="structure_feedback"
-        label="Organization & Structure"
-        value={feedback.structure_feedback}
-        editing={editing}
-        onEdit={onEdit}
-      />
+      <div>
+        <EditableTextField
+          fieldKey="structure_feedback"
+          label="Organization & Structure"
+          value={feedback.structure_feedback}
+          editing={editing}
+          onEdit={onEdit}
+        />
+        <TeacherCommentThread feedbackId={feedback.id} section="structure" comments={comments} onRefresh={onRefreshComments} />
+      </div>
     </div>
   );
 }

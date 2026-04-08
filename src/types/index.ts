@@ -130,6 +130,17 @@ export interface ErrorFrequency {
   examples: { original: string; revision: string }[];
 }
 
+export interface FeedbackComment {
+  id: string;
+  feedback_id: string;
+  section: string;
+  user_id: string;
+  role: 'student' | 'teacher';
+  message: string;
+  created_at: string;
+  profiles?: Profile;
+}
+
 export interface AIFeedbackResponse {
   overall_comment: string;
   characters_comment: string;
