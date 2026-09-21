@@ -20,6 +20,15 @@ import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
 import CompositionReview from '@/components/CompositionReview';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
+import ErrorLabels from '@/components/ErrorLabels';
+import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
+
+/** Pending changes to a submission's error labels (applied with Save Changes). */
+interface TagEdits {
+  deleted: string[];
+  /** tag id → new suggested_revision */
+  updated: Record<string, string>;
+}
 
 interface ClassError {
   error_type: ErrorType;
@@ -37,6 +46,7 @@ export default function ProjectDetailPage() {
   const [selectedTags, setSelectedTags] = useState<ErrorTag[]>([]);
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [editingRevisions, setEditingRevisions] = useState<SentenceRevision[] | null>(null);
+  const [tagEdits, setTagEdits] = useState<TagEdits | null>(null);
   const [saving, setSaving] = useState(false);
   const [issues, setIssues] = useState<ClassError[]>([]);
   const [issueCount, setIssueCount] = useState(0);
@@ -49,6 +59,14 @@ export default function ProjectDetailPage() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+
+  // What the teacher currently sees, including unsaved edits
+  const currentRevisions: SentenceRevision[] | null = selectedFeedback
+    ? editingRevisions ?? selectedFeedback.sentence_revisions ?? []
+    : null;
+  const visibleTags = selectedTags
+    .filter((t) => !tagEdits?.deleted.includes(t.id))
+    .map((t) => (tagEdits?.updated[t.id] !== undefined ? { ...t, suggested_revision: tagEdits.updated[t.id] } : t));
 
   useEffect(() => {
     loadData();
@@ -104,7 +122,7 @@ export default function ProjectDetailPage() {
 
   const handleSelectSubmission = async (sub: Submission) => {
     if (sub.id === selectedSub?.id) return;
-    const unsaved = Object.keys(editing).length > 0 || editingRevisions !== null;
+    const unsaved = Object.keys(editing).length > 0 || editingRevisions !== null || tagEdits !== null;
     if (unsaved && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
 
     latestSelection.current = sub.id;
@@ -114,6 +132,7 @@ export default function ProjectDetailPage() {
     setSelectedComments([]);
     setEditing({});
     setEditingRevisions(null);
+    setTagEdits(null);
 
     const { data: fb } = await supabase
       .from('feedback')
@@ -145,34 +164,77 @@ export default function ProjectDetailPage() {
     }
   };
 
+  /**
+   * The teacher changed the corrections. Labels belong to corrections: when a
+   * correction is deleted its labels go too, and a label that describes the
+   * whole sentence follows the teacher's new suggestion.
+   */
+  const handleRevisionsChange = (next: SentenceRevision[]) => {
+    if (selectedSub && currentRevisions) {
+      const { deleted, updated } = labelChangesFor(selectedSub.final_text, currentRevisions, next, visibleTags);
+      if (deleted.length || Object.keys(updated).length) {
+        setTagEdits((prev) => ({
+          deleted: [...(prev?.deleted ?? []), ...deleted],
+          updated: { ...(prev?.updated ?? {}), ...updated },
+        }));
+      }
+    }
+    setEditingRevisions(next);
+  };
+
+  const removeTag = (tagId: string) => {
+    setTagEdits((prev) => ({ deleted: [...(prev?.deleted ?? []), tagId], updated: prev?.updated ?? {} }));
+  };
+
   const handleEditField = (field: string, value: string) => {
     setEditing((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSaveEdits = async () => {
-    if (!selectedFeedback) return;
+    if (!selectedFeedback || !selectedSub) return;
     const hasTextEdits = Object.keys(editing).length > 0;
     const hasRevisionEdits = editingRevisions !== null;
-    if (!hasTextEdits && !hasRevisionEdits) return;
+    if (!hasTextEdits && !hasRevisionEdits && !tagEdits) return;
 
     setSaving(true);
+    let ok = true;
 
-    const body: Record<string, unknown> = { ...editing };
-    if (hasRevisionEdits) {
-      body.sentence_revisions = editingRevisions;
+    if (hasTextEdits || hasRevisionEdits) {
+      const body: Record<string, unknown> = { ...editing };
+      if (hasRevisionEdits) {
+        body.sentence_revisions = editingRevisions;
+      }
+      const res = await fetch(`/api/feedback/${selectedFeedback.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedFeedback(updated);
+        setEditing({});
+        setEditingRevisions(null);
+      } else {
+        ok = false;
+      }
     }
 
-    const res = await fetch(`/api/feedback/${selectedFeedback.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      const updated = await res.json();
-      setSelectedFeedback(updated);
-      setEditing({});
-      setEditingRevisions(null);
+    if (ok && tagEdits) {
+      const results = await Promise.all([
+        ...tagEdits.deleted.map((id) => fetch(`/api/error-tags/${id}`, { method: 'DELETE' })),
+        ...Object.entries(tagEdits.updated)
+          .filter(([id]) => !tagEdits.deleted.includes(id))
+          .map(([id, suggested_revision]) =>
+            fetch(`/api/error-tags/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ suggested_revision }),
+            })
+          ),
+      ]);
+      if (results.every((r) => r.ok)) setTagEdits(null);
+      const { data: tags } = await supabase.from('error_tags').select('*').eq('submission_id', selectedSub.id);
+      setSelectedTags(tags || []);
     }
     setSaving(false);
   };
@@ -215,7 +277,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null;
+  const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || tagEdits !== null;
 
   // Warn before leaving the page with unsaved feedback edits
   useEffect(() => {
@@ -421,14 +483,15 @@ export default function ProjectDetailPage() {
                 key={selectedSub.id}
                 text={selectedSub.final_text}
                 imagePath={selectedSub.image_path}
-                revisions={selectedFeedback ? editingRevisions ?? selectedFeedback.sentence_revisions ?? [] : null}
+                revisions={currentRevisions}
                 partial={!!selectedFeedback && !selectedFeedback.correction_level}
-                errorTags={selectedTags}
+                errorTags={visibleTags}
                 role="teacher"
                 feedbackId={selectedFeedback?.id}
                 comments={selectedComments}
                 onRefreshComments={() => selectedFeedback && loadCommentsForFeedback(selectedFeedback.id)}
-                onChangeRevisions={selectedFeedback ? setEditingRevisions : undefined}
+                onChangeRevisions={selectedFeedback ? handleRevisionsChange : undefined}
+                onRemoveTag={selectedFeedback ? removeTag : undefined}
                 className="mb-6"
               />
 
@@ -442,7 +505,10 @@ export default function ProjectDetailPage() {
                   )}
                   <EditableFeedback
                     feedback={selectedFeedback}
-                    errorTags={selectedTags}
+                    compositionText={selectedSub.final_text}
+                    revisions={currentRevisions}
+                    errorTags={visibleTags}
+                    onRemoveTag={removeTag}
                     editing={editing}
                     onEdit={handleEditField}
                     comments={selectedComments}
@@ -479,14 +545,20 @@ export default function ProjectDetailPage() {
 
 function EditableFeedback({
   feedback,
+  compositionText,
+  revisions,
   errorTags,
+  onRemoveTag,
   editing,
   onEdit,
   comments,
   onRefreshComments,
 }: {
   feedback: Feedback;
+  compositionText: string;
+  revisions: SentenceRevision[] | null;
   errorTags: ErrorTag[];
+  onRemoveTag: (tagId: string) => void;
   editing: Record<string, string>;
   onEdit: (field: string, value: string) => void;
   comments: FeedbackComment[];
@@ -499,6 +571,8 @@ function EditableFeedback({
     groupedErrors.set(tag.error_type as ErrorType, list);
   }
 
+  // Labels link to the corrections in the composition (edit them there)
+  const links = linkTagsToCorrections(compositionText, revisions, errorTags);
   const characterErrors = groupedErrors.get('characters') || [];
   const vocabErrors = groupedErrors.get('vocabulary') || [];
   const grammarErrors = groupedErrors.get('grammar') || [];
@@ -524,13 +598,7 @@ function EditableFeedback({
           editing={editing}
           onEdit={onEdit}
         />
-        {characterErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {characterErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        <ErrorLabels tags={characterErrors} links={links} onRemove={onRemoveTag} />
         <TeacherCommentThread feedbackId={feedback.id} section="characters" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
@@ -543,13 +611,7 @@ function EditableFeedback({
           editing={editing}
           onEdit={onEdit}
         />
-        {vocabErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {vocabErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        <ErrorLabels tags={vocabErrors} links={links} onRemove={onRemoveTag} />
         <TeacherCommentThread feedbackId={feedback.id} section="vocabulary" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
@@ -562,13 +624,7 @@ function EditableFeedback({
           editing={editing}
           onEdit={onEdit}
         />
-        {grammarErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {grammarErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        <ErrorLabels tags={grammarErrors} links={links} onRemove={onRemoveTag} />
         <TeacherCommentThread feedbackId={feedback.id} section="grammar" comments={comments} onRefresh={onRefreshComments} />
       </section>
 
@@ -646,17 +702,3 @@ function EditableTextField({
   );
 }
 
-function ErrorTagCard({ tag }: { tag: ErrorTag }) {
-  return (
-    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-      {tag.pattern_name && (
-        <span className="text-xs text-blue-600 font-medium">{tag.pattern_name}</span>
-      )}
-      <div className="text-sm mt-1">
-        <span className="text-red-600 line-through">{tag.original_text}</span>
-        <span className="text-green-700 ml-2">&rarr; {tag.suggested_revision}</span>
-      </div>
-      <p className="text-xs text-gray-500 mt-1">{tag.explanation}</p>
-    </div>
-  );
-}

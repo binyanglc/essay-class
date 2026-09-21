@@ -156,7 +156,12 @@ export default function TeacherStudentDetailPage() {
                 className="mb-6"
               />
               {selectedFeedback ? (
-                <FeedbackView feedback={selectedFeedback} errorTags={selectedTags} />
+                <FeedbackView
+                  feedback={selectedFeedback}
+                  errorTags={selectedTags}
+                  compositionText={selectedSub.final_text}
+                  revisions={selectedFeedback.sentence_revisions}
+                />
               ) : (
                 <p className="text-gray-500 text-sm">No feedback data</p>
               )}

@@ -6,6 +6,7 @@ import type { Revision } from '@/lib/revisions';
 import { DiffOps, NumberBadge } from './TrackChangesView';
 
 export interface TagChip {
+  id?: string;
   error_type: string;
   pattern_name: string;
 }
@@ -31,11 +32,22 @@ const TYPE_STYLE: Record<string, { label: string; cls: string }> = {
   grammar: { label: 'Grammar', cls: 'bg-sky-50 text-sky-800 ring-sky-200' },
 };
 
-export function TypeChip({ tag, count }: { tag: TagChip; count?: number }) {
+export function TypeChip({ tag, count, onRemove }: { tag: TagChip; count?: number; onRemove?: () => void }) {
   const t = TYPE_STYLE[tag.error_type] ?? { label: tag.error_type, cls: 'bg-gray-50 text-gray-700 ring-gray-200' };
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${t.cls}`}>
       {count !== undefined ? `${t.label} ${count}` : `${t.label} · ${tag.pattern_name}`}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove label ${tag.pattern_name}`}
+          title="Remove this label"
+          className="-mr-1 px-0.5 text-sm leading-none opacity-60 hover:text-red-600 hover:opacity-100"
+        >
+          &times;
+        </button>
+      )}
     </span>
   );
 }
@@ -63,6 +75,8 @@ interface Props {
   onCancel: () => void;
   onDelete: () => void;
   onAttach: () => void;
+  /** Teacher only: remove an error label from this correction. */
+  onRemoveTag?: (tagId: string) => void;
 }
 
 /** Details of one correction: what the student wrote, the suggestion, and why. */
@@ -102,7 +116,11 @@ export default function RevisionInspector(props: Props) {
               </span>
             )}
             {tags.map((t) => (
-              <TypeChip key={`${t.error_type}-${t.pattern_name}`} tag={t} />
+              <TypeChip
+                key={t.id ?? `${t.error_type}-${t.pattern_name}`}
+                tag={t}
+                onRemove={canEdit && props.onRemoveTag && t.id ? () => props.onRemoveTag?.(t.id!) : undefined}
+              />
             ))}
           </div>
         )}

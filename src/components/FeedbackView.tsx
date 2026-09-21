@@ -1,14 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Feedback, ErrorTag, ErrorType, FeedbackComment, Profile } from '@/types';
+import { Feedback, ErrorTag, ErrorType, FeedbackComment, Profile, SentenceRevision } from '@/types';
+import { linkTagsToCorrections } from '@/lib/correction-links';
+import ErrorLabels from './ErrorLabels';
 
 interface Props {
   feedback: Feedback;
   errorTags?: ErrorTag[];
+  /** With the composition, error labels link to their corrections instead of repeating them. */
+  compositionText?: string;
+  revisions?: SentenceRevision[] | null;
 }
 
-export default function FeedbackView({ feedback, errorTags }: Props) {
+export default function FeedbackView({ feedback, errorTags, compositionText, revisions }: Props) {
   const [comments, setComments] = useState<FeedbackComment[]>([]);
 
   const groupedErrors = new Map<ErrorType, ErrorTag[]>();
@@ -19,6 +24,20 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
       groupedErrors.set(tag.error_type as ErrorType, list);
     }
   }
+
+  const links = compositionText ? linkTagsToCorrections(compositionText, revisions, errorTags ?? []) : null;
+  const renderTags = (tags: ErrorTag[]) =>
+    links ? (
+      <ErrorLabels tags={tags} links={links} />
+    ) : (
+      tags.length > 0 && (
+        <div className="space-y-2 mt-2">
+          {tags.map((tag, i) => (
+            <ErrorTagCard key={i} tag={tag} />
+          ))}
+        </div>
+      )
+    );
 
   const characterErrors = groupedErrors.get('characters') || [];
   const vocabErrors = groupedErrors.get('vocabulary') || [];
@@ -73,13 +92,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
           comment={feedback.characters_comment}
           hasErrors={characterErrors.length > 0}
         />
-        {characterErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {characterErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        {renderTags(characterErrors)}
         <CommentThread
           feedbackId={feedback.id}
           section="characters"
@@ -95,13 +108,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
           comment={feedback.vocabulary_comment}
           hasErrors={vocabErrors.length > 0}
         />
-        {vocabErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {vocabErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        {renderTags(vocabErrors)}
         <CommentThread
           feedbackId={feedback.id}
           section="vocabulary"
@@ -117,13 +124,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
           comment={feedback.grammar_comment}
           hasErrors={grammarErrors.length > 0}
         />
-        {grammarErrors.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {grammarErrors.map((tag, i) => (
-              <ErrorTagCard key={i} tag={tag} />
-            ))}
-          </div>
-        )}
+        {renderTags(grammarErrors)}
         <CommentThread
           feedbackId={feedback.id}
           section="grammar"

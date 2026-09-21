@@ -91,7 +91,12 @@ export default function SubmissionDetailPage() {
       {feedback ? (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="text-lg font-bold mb-4">Feedback</h2>
-          <FeedbackView feedback={feedback} errorTags={errorTags} />
+          <FeedbackView
+            feedback={feedback}
+            errorTags={errorTags}
+            compositionText={submission.final_text}
+            revisions={feedback.sentence_revisions}
+          />
         </div>
       ) : (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">

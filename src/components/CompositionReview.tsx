@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { containsLoosely, placeRevisions, rebaseRevision } from '@/lib/track-changes';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { placeRevisions, rebaseRevision } from '@/lib/track-changes';
+import { linkTags, onFocusCorrection } from '@/lib/correction-links';
 import { commentKeyFor, newRevisionId, withRevisionIds } from '@/lib/revisions';
 import type { Revision } from '@/lib/revisions';
 import type { ErrorTag, FeedbackComment, SentenceRevision } from '@/types';
@@ -39,6 +40,8 @@ interface Props {
   onRefreshComments?: () => void;
   /** Teacher editing: receives the whole updated list (ids included). Omit for read-only. */
   onChangeRevisions?: (next: SentenceRevision[]) => void;
+  /** Teacher editing: remove an error label (error_tags row). */
+  onRemoveTag?: (tagId: string) => void;
   label?: string;
   className?: string;
 }
@@ -59,6 +62,7 @@ export default function CompositionReview({
   comments: commentsProp,
   onRefreshComments,
   onChangeRevisions,
+  onRemoveTag,
   label = 'Composition',
   className = '',
 }: Props) {
@@ -129,22 +133,14 @@ export default function CompositionReview({
   const numbers = useMemo(() => new Map(ordered.map((r, i) => [r.id, i + 1] as [string, number])), [ordered]);
   const placedById = useMemo(() => new Map(placement.placed.map((p) => [p.rev.id, p])), [placement]);
 
-  const tagsFor = (id: string): TagChip[] => {
-    const p = placedById.get(id);
-    if (!p) return [];
-    const words = text.slice(p.start, p.end);
-    return errorTags.filter((t) => t.original_text && containsLoosely(words, t.original_text));
-  };
+  // Error labels (error_tags) belong to the correction that fixes them
+  const tagLinks = useMemo(() => linkTags(text, placement, errorTags), [text, placement, errorTags]);
+  const tagsFor = (id: string): TagChip[] => errorTags.filter((t) => tagLinks.get(t.id) === id);
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const p of placement.placed) {
-      const words = text.slice(p.start, p.end);
-      for (const t of errorTags) {
-        if (t.original_text && containsLoosely(words, t.original_text)) counts[t.error_type] = (counts[t.error_type] ?? 0) + 1;
-      }
-    }
+    for (const t of errorTags) if (tagLinks.has(t.id)) counts[t.error_type] = (counts[t.error_type] ?? 0) + 1;
     return counts;
-  }, [placement, errorTags, text]);
+  }, [errorTags, tagLinks]);
 
   // Which views are available, and which one is showing
   const modes: Mode[] = [...(revs ? (['track'] as Mode[]) : []), 'original', ...(revs ? (['revised'] as Mode[]) : []), ...(imagePath ? (['photo'] as Mode[]) : [])];
@@ -282,6 +278,17 @@ export default function CompositionReview({
     addAt(s, e);
   }
 
+  // A label in the Characters / Vocabulary / Grammar sections asks to open its correction
+  const focusHandler = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    focusHandler.current = (id: string) => {
+      if (!ordered.some((r) => r.id === id)) return;
+      activate(id);
+      scrollToMark(id);
+    };
+  });
+  useEffect(() => onFocusCorrection((id) => focusHandler.current(id)), []);
+
   function discussionFor(rev: Revision) {
     if (!feedbackId) return { node: null, count: 0 };
     const key = commentKeyFor(rev);
@@ -331,6 +338,7 @@ export default function CompositionReview({
           setAttachId(active.id);
           setChosenMode('track');
         }}
+        onRemoveTag={canEdit ? onRemoveTag : undefined}
       />
     );
   };
