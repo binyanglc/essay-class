@@ -264,7 +264,12 @@ export default function ProjectDetailPage() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
-            <CorrectionLevelSelect id="project-correction-level" value={projLevelDraft} onChange={setProjLevelDraft} />
+            <CorrectionLevelSelect
+              id="project-correction-level"
+              value={projLevelDraft}
+              onChange={setProjLevelDraft}
+              existingProject
+            />
             <div className="flex gap-2">
               <button
                 onClick={handleEditProject}

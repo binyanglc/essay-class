@@ -8,10 +8,13 @@ export default function CorrectionLevelSelect({
   id,
   value,
   onChange,
+  existingProject = false,
 }: {
   id: string;
   value: CorrectionLevel;
   onChange: (value: CorrectionLevel) => void;
+  /** Editing a project that may already have feedback. */
+  existingProject?: boolean;
 }) {
   const current = CORRECTION_LEVELS.find((l) => l.value === value) ?? CORRECTION_LEVELS[1];
   return (
@@ -32,7 +35,10 @@ export default function CorrectionLevelSelect({
           </option>
         ))}
       </select>
-      <p className="mt-1 text-xs text-gray-400">{current.hint} Applies to new submissions.</p>
+      <p className="mt-1 text-xs text-gray-400">
+        {current.hint}
+        {existingProject && ' Feedback already given stays as it is.'}
+      </p>
     </div>
   );
 }
