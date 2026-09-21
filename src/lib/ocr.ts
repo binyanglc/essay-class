@@ -1,3 +1,5 @@
+import { joinWrappedLines } from './text-layout';
+
 export async function performOCR(imageBase64: string): Promise<string> {
   const apiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
 
@@ -32,7 +34,8 @@ export async function performOCR(imageBase64: string): Promise<string> {
 
       if (result.ParsedResults && result.ParsedResults.length > 0) {
         const text = result.ParsedResults[0].ParsedText?.trim();
-        if (text) return text;
+        // Lines end where the paper ends, not where sentences end: join them
+        if (text) return joinWrappedLines(text, { joinFullLines: true });
         if (engine === '2') continue; // empty result, try Engine 1
       }
     } catch (e) {

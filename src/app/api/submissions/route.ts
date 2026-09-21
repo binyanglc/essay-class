@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { generateFeedback } from '@/lib/ai-feedback';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
+import { joinWrappedLines } from '@/lib/text-layout';
 import { isCorrectionLevel } from '@/types';
 import type { CorrectionLevel } from '@/types';
 
@@ -76,8 +77,9 @@ export async function POST(request: NextRequest) {
 
     let feedbackData;
     try {
+      // The AI sees mid-sentence line breaks joined; revisions are still anchored to finalText
       feedbackData = await generateFeedback(
-        finalText,
+        joinWrappedLines(finalText),
         errorPatterns,
         previousCount ?? 0,
         correctionLevel

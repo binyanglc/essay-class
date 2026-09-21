@@ -68,7 +68,7 @@ Return a JSON object with this EXACT structure:
 
 SENTENCE REVISION RULES (VERY IMPORTANT — the revisions are shown inside the full composition, like track changes):
 1. Go through the composition sentence by sentence, in order. Include EVERY sentence that needs a correction at the correction level above, and ONLY those. Sentences that are already acceptable must not appear.
-2. "original" must be copied character-for-character from the composition — same characters, same punctuation — so it can be found in the text. One sentence (or clause) per item.
+2. "original" must be copied character-for-character from the composition — same characters, same punctuation — so it can be found in the text. One whole sentence (or clause) per item; a sentence may continue across a line break.
 3. Make the smallest change that fixes each problem. Keep the student's words, sentence structure and ideas. Do not rewrite sentences in your own style and do not replace correct words with fancier ones.
 4. Keep revisions at the student's level — no vocabulary far beyond what they used. If you must use a new word or pattern, explain it.
 

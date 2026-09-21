@@ -205,7 +205,7 @@ export default function SubmissionForm({ classId, projectId }: Props) {
           Composition
           {ocrText && (
             <span className="text-gray-400 font-normal ml-2">
-              (OCR result — please review and correct)
+              (recognized from your photo — check it and delete any crossed-out characters)
             </span>
           )}
         </label>

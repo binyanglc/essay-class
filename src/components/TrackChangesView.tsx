@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { segmentText } from '@/lib/track-changes';
-import type { DiffOp, Placement, PlacedRevision } from '@/lib/track-changes';
+import { segmentText, splitSentences } from '@/lib/track-changes';
+import type { DiffOp, Placement, PlacedRevision, Segment } from '@/lib/track-changes';
 import type { Revision } from '@/lib/revisions';
 
 export type EssayMode = 'track' | 'original' | 'revised';
@@ -17,6 +17,8 @@ interface Props {
   /** Teacher only: called with the range of the student's text the reader selected. */
   onSelectRange?: (start: number, end: number) => void;
   selectLabel?: string;
+  /** Teacher only: called when an unmarked sentence is clicked. */
+  onPickSentence?: (start: number, end: number) => void;
 }
 
 export const DEL_CLASS = 'text-red-600 line-through decoration-red-500/80 bg-red-50 rounded-sm';
@@ -36,6 +38,7 @@ export default function TrackChangesView({
   onActivate,
   onSelectRange,
   selectLabel = '+ Add correction',
+  onPickSentence,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<{
@@ -90,7 +93,54 @@ export default function TrackChangesView({
     });
   }
 
-  const segments = mode === 'original' ? null : segmentText(text, placement.placed);
+  const segments: Segment<Revision>[] =
+    mode === 'original'
+      ? [{ kind: 'plain', start: 0, end: text.length, text }]
+      : segmentText(text, placement.placed);
+
+  const canPick = !!onPickSentence && mode !== 'revised';
+
+  function pick(start: number, end: number) {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return; // the reader is selecting words, not clicking
+    onPickSentence?.(start, end);
+  }
+
+  // Unmarked text. For the teacher, each sentence can be clicked to correct it.
+  function renderPlain(seg: { start: number; end: number; text: string }) {
+    if (!canPick) {
+      return (
+        <span key={`p${seg.start}`} data-start={seg.start}>
+          {seg.text}
+        </span>
+      );
+    }
+    return splitSentences(text, seg.start, seg.end).map((p) =>
+      p.blank ? (
+        <span key={`b${p.start}`} data-start={p.start}>
+          {text.slice(p.start, p.end)}
+        </span>
+      ) : (
+        <span
+          key={`s${p.start}`}
+          data-start={p.start}
+          role="button"
+          tabIndex={0}
+          title="Click to correct this sentence"
+          onClick={() => pick(p.start, p.end)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onPickSentence?.(p.start, p.end);
+            }
+          }}
+          className="cursor-pointer rounded box-decoration-clone transition-colors hover:bg-gray-200/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+        >
+          {text.slice(p.start, p.end)}
+        </span>
+      )
+    );
+  }
 
   return (
     <div
@@ -100,24 +150,18 @@ export default function TrackChangesView({
       onMouseUp={handleSelectionEnd}
       onKeyUp={(e) => e.shiftKey && handleSelectionEnd()}
     >
-      {segments === null ? (
-        <span data-start={0}>{text}</span>
-      ) : (
-        segments.map((seg) =>
-          seg.kind === 'plain' ? (
-            <span key={`p${seg.start}`} data-start={seg.start}>
-              {seg.text}
-            </span>
-          ) : (
-            <RevisionMark
-              key={seg.placed.rev.id}
-              placed={seg.placed}
-              n={numbers.get(seg.placed.rev.id) ?? 0}
-              active={activeId === seg.placed.rev.id}
-              showRevised={mode === 'revised'}
-              onActivate={onActivate}
-            />
-          )
+      {segments.map((seg) =>
+        seg.kind === 'plain' ? (
+          renderPlain(seg)
+        ) : (
+          <RevisionMark
+            key={seg.placed.rev.id}
+            placed={seg.placed}
+            n={numbers.get(seg.placed.rev.id) ?? 0}
+            active={activeId === seg.placed.rev.id}
+            showRevised={mode === 'revised'}
+            onActivate={onActivate}
+          />
         )
       )}
 

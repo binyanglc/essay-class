@@ -8,6 +8,8 @@
  * Pure functions, no React — shared by the teacher and student views.
  */
 
+import { softLineBreaks } from './text-layout';
+
 export interface RevisionLike {
   original: string;
   revised: string;
@@ -420,4 +422,45 @@ export function applyRevisions<R extends RevisionLike>(text: string, placed: Pla
 export function containsLoosely(hay: string, needle: string): boolean {
   const n = normalize(needle);
   return !!n && normalize(hay).includes(n);
+}
+
+// ---------------------------------------------------------------------------
+// Sentences (for clicking a sentence to correct it)
+// ---------------------------------------------------------------------------
+
+const SENTENCE_END_CHAR = /[。！？!?…；;]/;
+const SENTENCE_TAIL_CHAR = /[。！？!?…；;”’"'」』）)》]/;
+
+export interface TextPiece {
+  start: number;
+  end: number;
+  /** Whitespace only (spaces, line breaks). */
+  blank: boolean;
+}
+
+/**
+ * Splits text[from, to) into sentences and the whitespace between them,
+ * covering the range completely. A sentence ends after sentence-final
+ * punctuation (plus closing quotes) or at a paragraph break — a line break
+ * that is only a wrap (e.g. from OCR) does not end it.
+ */
+export function splitSentences(text: string, from = 0, to = text.length): TextPiece[] {
+  const soft = softLineBreaks(text);
+  const pieces: TextPiece[] = [];
+  let i = from;
+  while (i < to) {
+    let j = i;
+    while (j < to && /\s/.test(text[j])) j++;
+    if (j > i) {
+      pieces.push({ start: i, end: j, blank: true });
+      i = j;
+      continue;
+    }
+    while (j < to && !(text[j] === '\n' && !soft.has(j)) && !SENTENCE_END_CHAR.test(text[j])) j++;
+    while (j < to && SENTENCE_TAIL_CHAR.test(text[j])) j++;
+    if (j === i) j++;
+    pieces.push({ start: i, end: j, blank: false });
+    i = j;
+  }
+  return pieces;
 }

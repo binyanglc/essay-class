@@ -264,6 +264,22 @@ export default function CompositionReview({
     setChosenMode('track');
   }
 
+  /** Teacher clicked an unmarked sentence: open the correction editor for it. */
+  function pickSentence(start: number, end: number) {
+    let s = start;
+    let e = end;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    if (s >= e) return;
+    // In the Original view a sentence may already have a correction: open that one
+    const existing = placement.placed.find((p) => s < p.end && p.start < e);
+    if (existing && !attachId) {
+      activate(existing.rev.id);
+      return;
+    }
+    addAt(s, e);
+  }
+
   function discussionFor(rev: Revision) {
     if (!feedbackId) return { node: null, count: 0 };
     const key = commentKeyFor(rev);
@@ -356,7 +372,7 @@ export default function CompositionReview({
       )}
       {canEdit && (
         <p className="mt-3 border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-500">
-          Missed an error? Select the words in the composition to add your own correction.
+          Missed an error? Click any sentence to correct it, or select a few words for a smaller correction.
         </p>
       )}
     </div>
@@ -407,7 +423,9 @@ export default function CompositionReview({
               )}
               {attachId && (
                 <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-gray-900 px-3 py-2 text-xs text-white">
-                  <span>Select the words in the composition that correction {numbers.get(attachId)} belongs to.</span>
+                  <span>
+                    Click the sentence (or select the words) that correction {numbers.get(attachId)} belongs to.
+                  </span>
                   <button type="button" onClick={() => setAttachId(null)} className="shrink-0 text-gray-300 hover:text-white">
                     Cancel
                   </button>
@@ -422,6 +440,7 @@ export default function CompositionReview({
                 onActivate={activate}
                 onSelectRange={canEdit ? addAt : undefined}
                 selectLabel={attachId ? `Attach correction ${numbers.get(attachId)} here` : '+ Add correction'}
+                onPickSentence={canEdit ? pickSentence : undefined}
               />
               {mode === 'track' && ordered.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500">
