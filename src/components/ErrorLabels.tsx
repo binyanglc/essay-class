@@ -40,7 +40,11 @@ export default function ErrorLabels({
                 <button
                   type="button"
                   onClick={() => focusCorrection(link.revisionId)}
-                  title="Show this correction in the composition"
+                  title={
+                    onRemove
+                      ? 'Open this correction — you can change the label there'
+                      : 'Show this correction in the composition'
+                  }
                   className="inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 hover:bg-gray-200"
                 >
                   <NumberBadge n={link.n} raised={false} />

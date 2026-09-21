@@ -8,11 +8,15 @@ interface ExampleItem {
   original: string;
   revision: string;
   explanation: string;
+  /** The error label, e.g. "了 usage". */
+  pattern_name?: string;
 }
 
 interface ClassError {
   error_type: ErrorType;
   count: number;
+  /** Most common labels of this kind. */
+  patterns?: { name: string; count: number }[];
   examples: ExampleItem[];
 }
 
@@ -82,9 +86,25 @@ export default function ClassIssues({ errors, totalSubmissions, onRefresh }: Pro
               <h3 className="font-semibold text-lg">
                 {ERROR_TYPE_LABELS[e.error_type]}
               </h3>
-              <p className="text-sm text-gray-500">{e.count} occurrences</p>
+              <p className="text-sm text-gray-500">
+                {e.count} occurrence{e.count === 1 ? '' : 's'}
+              </p>
             </div>
           </div>
+
+          {e.patterns && e.patterns.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {e.patterns.slice(0, 8).map((p) => (
+                <span
+                  key={p.name}
+                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
+                >
+                  {p.name}
+                  <span className="text-gray-400">&times;{p.count}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-3">
             {e.examples.map((ex) => (
@@ -138,6 +158,9 @@ export default function ClassIssues({ errors, totalSubmissions, onRefresh }: Pro
                   <>
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
+                        {ex.pattern_name && (
+                          <div className="mb-1 text-xs font-medium text-blue-600">{ex.pattern_name}</div>
+                        )}
                         <div className="text-sm text-red-600 line-through">
                           {ex.original}
                         </div>

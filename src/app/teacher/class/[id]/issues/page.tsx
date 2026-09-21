@@ -10,7 +10,8 @@ import ClassIssues from '@/components/ClassIssues';
 interface ClassError {
   error_type: ErrorType;
   count: number;
-  examples: { id: string; original: string; revision: string; explanation: string }[];
+  patterns?: { name: string; count: number }[];
+  examples: { id: string; original: string; revision: string; explanation: string; pattern_name?: string }[];
 }
 
 export default function ClassIssuesPage() {

@@ -21,19 +21,23 @@ import TeacherCommentThread from '@/components/TeacherCommentThread';
 import CompositionReview from '@/components/CompositionReview';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 import ErrorLabels from '@/components/ErrorLabels';
+import type { LabelSuggestion } from '@/components/RevisionInspector';
 import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
-
-/** Pending changes to a submission's error labels (applied with Save Changes). */
-interface TagEdits {
-  deleted: string[];
-  /** tag id → new suggested_revision */
-  updated: Record<string, string>;
-}
+import {
+  addTag as addTagEdit,
+  applyTagEdits,
+  emptyTagEdits,
+  isTagEditsEmpty,
+  removeTag as removeTagEdit,
+  updateTag as updateTagEdit,
+} from '@/lib/tag-edits';
+import type { LabelFields, NewTag, TagEdits } from '@/lib/tag-edits';
 
 interface ClassError {
   error_type: ErrorType;
   count: number;
-  examples: { id: string; original: string; revision: string; explanation: string }[];
+  patterns?: { name: string; count: number }[];
+  examples: { id: string; original: string; revision: string; explanation: string; pattern_name?: string }[];
 }
 
 export default function ProjectDetailPage() {
@@ -48,6 +52,8 @@ export default function ProjectDetailPage() {
   const [editingRevisions, setEditingRevisions] = useState<SentenceRevision[] | null>(null);
   const [tagEdits, setTagEdits] = useState<TagEdits | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [labelSuggestions, setLabelSuggestions] = useState<LabelSuggestion[]>([]);
   const [issues, setIssues] = useState<ClassError[]>([]);
   const [issueCount, setIssueCount] = useState(0);
   const [showIssues, setShowIssues] = useState(false);
@@ -64,9 +70,10 @@ export default function ProjectDetailPage() {
   const currentRevisions: SentenceRevision[] | null = selectedFeedback
     ? editingRevisions ?? selectedFeedback.sentence_revisions ?? []
     : null;
-  const visibleTags = selectedTags
-    .filter((t) => !tagEdits?.deleted.includes(t.id))
-    .map((t) => (tagEdits?.updated[t.id] !== undefined ? { ...t, suggested_revision: tagEdits.updated[t.id] } : t));
+  const visibleTags = selectedSub
+    ? applyTagEdits(selectedTags, tagEdits, { submission_id: selectedSub.id, student_id: selectedSub.student_id })
+    : [];
+  const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || !isTagEditsEmpty(tagEdits);
 
   useEffect(() => {
     loadData();
@@ -88,12 +95,7 @@ export default function ProjectDetailPage() {
       .order('created_at', { ascending: false });
     setSubmissions(subs || []);
 
-    const res = await fetch(
-      `/api/teacher/issues?classId=${classId}&projectId=${projectId}`
-    );
-    const issueData = await res.json();
-    setIssues(issueData.errorTypes || []);
-    setIssueCount(issueData.totalSubmissions || 0);
+    await Promise.all([loadIssues(), loadLabelSuggestions()]);
 
     if (subs && subs.length > 0) {
       const counts: Record<string, number> = {};
@@ -117,13 +119,50 @@ export default function ProjectDetailPage() {
     setLoading(false);
   }
 
+  /** Common Issues is worked out from the saved labels each time it loads — nothing to regenerate. */
+  async function loadIssues() {
+    try {
+      const res = await fetch(`/api/teacher/issues?classId=${classId}&projectId=${projectId}`);
+      if (!res.ok) return;
+      const issueData = await res.json();
+      setIssues(issueData.errorTypes || []);
+      setIssueCount(issueData.totalSubmissions || 0);
+    } catch {
+      // keep what is shown
+    }
+  }
+
+  /** Label names already used in this class, most used first, so names stay consistent. */
+  async function loadLabelSuggestions() {
+    const { data } = await supabase
+      .from('error_tags')
+      .select('error_type, pattern_name, submissions!inner(class_id)')
+      .eq('submissions.class_id', classId)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    if (!data) return;
+    const counts = new Map<string, LabelSuggestion & { count: number }>();
+    for (const t of data as unknown as { error_type: string; pattern_name: string | null }[]) {
+      const name = t.pattern_name?.trim();
+      if (!name) continue;
+      const key = `${t.error_type}|${name}`;
+      const hit = counts.get(key);
+      if (hit) hit.count++;
+      else counts.set(key, { error_type: t.error_type, pattern_name: name, count: 1 });
+    }
+    setLabelSuggestions(
+      Array.from(counts.values())
+        .sort((a, b) => b.count - a.count)
+        .map(({ error_type, pattern_name }) => ({ error_type, pattern_name }))
+    );
+  }
+
   const [selectedComments, setSelectedComments] = useState<FeedbackComment[]>([]);
   const latestSelection = useRef<string | null>(null);
 
   const handleSelectSubmission = async (sub: Submission) => {
     if (sub.id === selectedSub?.id) return;
-    const unsaved = Object.keys(editing).length > 0 || editingRevisions !== null || tagEdits !== null;
-    if (unsaved && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
+    if (hasEdits && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
 
     latestSelection.current = sub.id;
     setSelectedSub(sub);
@@ -133,6 +172,7 @@ export default function ProjectDetailPage() {
     setEditing({});
     setEditingRevisions(null);
     setTagEdits(null);
+    setSaveError(null);
 
     const { data: fb } = await supabase
       .from('feedback')
@@ -164,6 +204,13 @@ export default function ProjectDetailPage() {
     }
   };
 
+  /** Label changes wait for Save Changes, like the other feedback edits. */
+  const editTags = (fn: (e: TagEdits) => TagEdits) =>
+    setTagEdits((prev) => {
+      const next = fn(prev ?? emptyTagEdits());
+      return isTagEditsEmpty(next) ? null : next;
+    });
+
   /**
    * The teacher changed the corrections. Labels belong to corrections: when a
    * correction is deleted its labels go too, and a label that describes the
@@ -173,17 +220,82 @@ export default function ProjectDetailPage() {
     if (selectedSub && currentRevisions) {
       const { deleted, updated } = labelChangesFor(selectedSub.final_text, currentRevisions, next, visibleTags);
       if (deleted.length || Object.keys(updated).length) {
-        setTagEdits((prev) => ({
-          deleted: [...(prev?.deleted ?? []), ...deleted],
-          updated: { ...(prev?.updated ?? {}), ...updated },
-        }));
+        editTags((e) => {
+          let out = e;
+          for (const id of deleted) out = removeTagEdit(out, id);
+          for (const [id, suggested_revision] of Object.entries(updated)) {
+            out = updateTagEdit(out, id, { suggested_revision });
+          }
+          return out;
+        });
       }
     }
     setEditingRevisions(next);
   };
 
-  const removeTag = (tagId: string) => {
-    setTagEdits((prev) => ({ deleted: [...(prev?.deleted ?? []), tagId], updated: prev?.updated ?? {} }));
+  const handleAddTag = (tag: Omit<NewTag, 'id'>) => {
+    // Already labelled like this: nothing to add
+    const same = (t: { error_type: string; pattern_name: string; original_text: string }) =>
+      t.error_type === tag.error_type && t.pattern_name === tag.pattern_name && t.original_text === tag.original_text;
+    if (visibleTags.some(same)) return;
+    editTags((e) => addTagEdit(e, tag));
+  };
+
+  const handleUpdateTag = (tagId: string, label: LabelFields) => {
+    const tag = visibleTags.find((t) => t.id === tagId);
+    if (tag && tag.error_type === label.error_type && tag.pattern_name === label.pattern_name) return;
+    editTags((e) => updateTagEdit(e, tagId, label));
+  };
+
+  const handleRemoveTag = (tagId: string) => editTags((e) => removeTagEdit(e, tagId));
+
+  const reloadSelectedTags = async (subId: string) => {
+    const { data: tags } = await supabase.from('error_tags').select('*').eq('submission_id', subId);
+    if (latestSelection.current === subId) setSelectedTags(tags || []);
+  };
+
+  /** Sends the label changes; returns the ones that failed so they can be tried again. */
+  const saveLabelEdits = async (subId: string, labels: TagEdits): Promise<TagEdits> => {
+    const failed = emptyTagEdits();
+    const saved = new Map(selectedTags.map((t) => [t.id, t] as [string, ErrorTag]));
+    const send = (url: string, method: string, body?: unknown) =>
+      fetch(url, {
+        method,
+        ...(body === undefined
+          ? {}
+          : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+      })
+        .then((r) => r.ok)
+        .catch(() => false);
+
+    await Promise.all([
+      ...labels.added.map(async (t) => {
+        const ok = await send('/api/error-tags', 'POST', {
+          submission_id: subId,
+          error_type: t.error_type,
+          pattern_name: t.pattern_name,
+          original_text: t.original_text,
+          suggested_revision: t.suggested_revision,
+          explanation: t.explanation,
+        });
+        if (!ok) failed.added.push(t);
+      }),
+      // Labels already gone (e.g. deleted in Common Issues) need nothing
+      ...labels.deleted
+        .filter((id) => saved.has(id))
+        .map(async (id) => {
+          if (!(await send(`/api/error-tags/${id}`, 'DELETE'))) failed.deleted.push(id);
+        }),
+      ...Object.entries(labels.updated)
+        .filter(([id]) => saved.has(id) && !labels.deleted.includes(id))
+        .map(async ([id, patch]) => {
+          // The AI's study tip was written for its own diagnosis: drop it when the teacher renames the label
+          const renamed = patch.pattern_name !== undefined && patch.pattern_name !== saved.get(id)?.pattern_name;
+          const ok = await send(`/api/error-tags/${id}`, 'PUT', renamed ? { ...patch, improvement_tip: '' } : patch);
+          if (!ok) failed.updated[id] = patch;
+        }),
+    ]);
+    return failed;
   };
 
   const handleEditField = (field: string, value: string) => {
@@ -194,10 +306,12 @@ export default function ProjectDetailPage() {
     if (!selectedFeedback || !selectedSub) return;
     const hasTextEdits = Object.keys(editing).length > 0;
     const hasRevisionEdits = editingRevisions !== null;
-    if (!hasTextEdits && !hasRevisionEdits && !tagEdits) return;
+    const labels = isTagEditsEmpty(tagEdits) ? null : tagEdits;
+    if (!hasTextEdits && !hasRevisionEdits && !labels) return;
 
+    const subId = selectedSub.id;
     setSaving(true);
-    let ok = true;
+    setSaveError(null);
 
     if (hasTextEdits || hasRevisionEdits) {
       const body: Record<string, unknown> = { ...editing };
@@ -208,35 +322,40 @@ export default function ProjectDetailPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        const updated = await res.json();
+      }).catch(() => null);
+      if (!res?.ok) {
+        setSaveError('Could not save your changes. Please try again.');
+        setSaving(false);
+        return;
+      }
+      const updated = await res.json();
+      if (latestSelection.current === subId) {
         setSelectedFeedback(updated);
         setEditing({});
         setEditingRevisions(null);
-      } else {
-        ok = false;
       }
     }
 
-    if (ok && tagEdits) {
-      const results = await Promise.all([
-        ...tagEdits.deleted.map((id) => fetch(`/api/error-tags/${id}`, { method: 'DELETE' })),
-        ...Object.entries(tagEdits.updated)
-          .filter(([id]) => !tagEdits.deleted.includes(id))
-          .map(([id, suggested_revision]) =>
-            fetch(`/api/error-tags/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ suggested_revision }),
-            })
-          ),
-      ]);
-      if (results.every((r) => r.ok)) setTagEdits(null);
-      const { data: tags } = await supabase.from('error_tags').select('*').eq('submission_id', selectedSub.id);
-      setSelectedTags(tags || []);
+    if (labels) {
+      const failed = await saveLabelEdits(subId, labels);
+      if (latestSelection.current === subId) {
+        const allSaved = isTagEditsEmpty(failed);
+        setTagEdits(allSaved ? null : failed);
+        if (!allSaved) setSaveError("Some label changes couldn't be saved. Click Save to try again.");
+      }
+      await reloadSelectedTags(subId);
+      loadLabelSuggestions();
     }
+
+    // Common Issues counts the saved labels: refresh it now
+    loadIssues();
     setSaving(false);
+  };
+
+  // Examples edited in Common Issues are labels too
+  const handleIssuesChanged = () => {
+    loadIssues();
+    if (selectedSub) reloadSelectedTags(selectedSub.id);
   };
 
   const handleEditProject = async () => {
@@ -276,8 +395,6 @@ export default function ProjectDetailPage() {
       loadData();
     }
   };
-
-  const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || tagEdits !== null;
 
   // Warn before leaving the page with unsaved feedback edits
   useEffect(() => {
@@ -390,7 +507,10 @@ export default function ProjectDetailPage() {
 
       <div>
         <button
-          onClick={() => setShowIssues(!showIssues)}
+          onClick={() => {
+            if (!showIssues) loadIssues();
+            setShowIssues(!showIssues);
+          }}
           className="bg-orange-500 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-orange-600 font-medium"
         >
           {showIssues ? 'Hide' : 'Show'} Common Issues ({issueCount} submissions)
@@ -399,7 +519,7 @@ export default function ProjectDetailPage() {
 
       {showIssues && (
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <ClassIssues errors={issues} totalSubmissions={issueCount} onRefresh={loadData} />
+          <ClassIssues errors={issues} totalSubmissions={issueCount} onRefresh={handleIssuesChanged} />
         </section>
       )}
 
@@ -478,6 +598,11 @@ export default function ProjectDetailPage() {
                   </button>
                 )}
               </div>
+              {saveError && (
+                <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {saveError}
+                </p>
+              )}
 
               <CompositionReview
                 key={selectedSub.id}
@@ -491,7 +616,10 @@ export default function ProjectDetailPage() {
                 comments={selectedComments}
                 onRefreshComments={() => selectedFeedback && loadCommentsForFeedback(selectedFeedback.id)}
                 onChangeRevisions={selectedFeedback ? handleRevisionsChange : undefined}
-                onRemoveTag={selectedFeedback ? removeTag : undefined}
+                onRemoveTag={selectedFeedback ? handleRemoveTag : undefined}
+                onAddTag={selectedFeedback ? handleAddTag : undefined}
+                onUpdateTag={selectedFeedback ? handleUpdateTag : undefined}
+                labelSuggestions={labelSuggestions}
                 className="mb-6"
               />
 
@@ -508,7 +636,7 @@ export default function ProjectDetailPage() {
                     compositionText={selectedSub.final_text}
                     revisions={currentRevisions}
                     errorTags={visibleTags}
-                    onRemoveTag={removeTag}
+                    onRemoveTag={handleRemoveTag}
                     editing={editing}
                     onEdit={handleEditField}
                     comments={selectedComments}

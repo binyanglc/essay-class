@@ -29,6 +29,8 @@ export async function getStudentErrorPatterns(
     const existing = patternMap.get(key);
     if (existing) {
       existing.count++;
+      // Labels added by the teacher have no study tip: use one from the same pattern
+      if (!existing.improvement_tip && tag.improvement_tip) existing.improvement_tip = tag.improvement_tip;
       if (existing.examples.length < 5) {
         existing.examples.push({
           original: tag.original_text || '',
@@ -121,43 +123,51 @@ export async function getClassErrorSummary(
 
   const { data: errorTags } = await supabase
     .from('error_tags')
-    .select('id, error_type, original_text, suggested_revision, explanation')
+    .select('id, error_type, pattern_name, original_text, suggested_revision, explanation')
     .in('submission_id', submissionIds);
 
   if (!errorTags) return { errorTypes: [], totalSubmissions: submissions.length };
 
+  // Worked out from the saved labels every time, so teachers' changes show up straight away
   const typeMap = new Map<
     string,
-    { count: number; examples: { id: string; original: string; revision: string; explanation: string }[] }
+    {
+      count: number;
+      names: Map<string, number>;
+      examples: { id: string; original: string; revision: string; explanation: string; pattern_name: string }[];
+    }
   >();
 
   for (const tag of errorTags) {
-    const existing = typeMap.get(tag.error_type);
-    if (existing) {
-      existing.count++;
-      if (existing.examples.length < 5) {
-        existing.examples.push({
-          id: tag.id,
-          original: tag.original_text || '',
-          revision: tag.suggested_revision || '',
-          explanation: tag.explanation || '',
-        });
-      }
-    } else {
-      typeMap.set(tag.error_type, {
-        count: 1,
-        examples: [{
-          id: tag.id,
-          original: tag.original_text || '',
-          revision: tag.suggested_revision || '',
-          explanation: tag.explanation || '',
-        }],
+    let entry = typeMap.get(tag.error_type);
+    if (!entry) {
+      entry = { count: 0, names: new Map(), examples: [] };
+      typeMap.set(tag.error_type, entry);
+    }
+    entry.count++;
+    const name = (tag.pattern_name || '').trim();
+    if (name) entry.names.set(name, (entry.names.get(name) ?? 0) + 1);
+    if (entry.examples.length < 5) {
+      entry.examples.push({
+        id: tag.id,
+        original: tag.original_text || '',
+        revision: tag.suggested_revision || '',
+        explanation: tag.explanation || '',
+        pattern_name: name,
       });
     }
   }
 
   const errorTypes = Array.from(typeMap.entries())
-    .map(([error_type, data]) => ({ error_type: error_type as ErrorType, ...data }))
+    .map(([error_type, { count, names, examples }]) => ({
+      error_type: error_type as ErrorType,
+      count,
+      /** The most common labels of this kind, e.g. "了 usage ×4". */
+      patterns: Array.from(names.entries())
+        .map(([patternName, n]) => ({ name: patternName, count: n }))
+        .sort((a, b) => b.count - a.count),
+      examples,
+    }))
     .sort((a, b) => b.count - a.count);
 
   return { errorTypes, totalSubmissions: submissions.length };

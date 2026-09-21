@@ -5,11 +5,11 @@ import { placeRevisions, rebaseRevision } from '@/lib/track-changes';
 import { linkTags, onFocusCorrection } from '@/lib/correction-links';
 import { commentKeyFor, newRevisionId, withRevisionIds } from '@/lib/revisions';
 import type { Revision } from '@/lib/revisions';
-import type { ErrorTag, FeedbackComment, SentenceRevision } from '@/types';
+import type { ErrorTag, ErrorType, FeedbackComment, SentenceRevision } from '@/types';
 import TrackChangesView, { DEL_CLASS, DiffOps, INS_CLASS, NumberBadge } from './TrackChangesView';
 import type { EssayMode } from './TrackChangesView';
 import RevisionInspector, { TypeChip } from './RevisionInspector';
-import type { Draft, TagChip } from './RevisionInspector';
+import type { Draft, LabelSuggestion, TagChip } from './RevisionInspector';
 import CompositionPhoto from './CompositionPhoto';
 import TeacherCommentThread from './TeacherCommentThread';
 import { CommentThread } from './FeedbackView';
@@ -42,6 +42,18 @@ interface Props {
   onChangeRevisions?: (next: SentenceRevision[]) => void;
   /** Teacher editing: remove an error label (error_tags row). */
   onRemoveTag?: (tagId: string) => void;
+  /** Teacher editing: add an error label for a correction. */
+  onAddTag?: (tag: {
+    error_type: ErrorType;
+    pattern_name: string;
+    original_text: string;
+    suggested_revision: string;
+    explanation: string;
+  }) => void;
+  /** Teacher editing: change a label's type or name. */
+  onUpdateTag?: (tagId: string, label: { error_type: ErrorType; pattern_name: string }) => void;
+  /** Label names already used in this class, suggested when labelling. */
+  labelSuggestions?: LabelSuggestion[];
   label?: string;
   className?: string;
 }
@@ -63,6 +75,9 @@ export default function CompositionReview({
   onRefreshComments,
   onChangeRevisions,
   onRemoveTag,
+  onAddTag,
+  onUpdateTag,
+  labelSuggestions,
   label = 'Composition',
   className = '',
 }: Props) {
@@ -311,8 +326,10 @@ export default function CompositionReview({
   const inspector = (slot: string) => {
     if (!active) return null;
     const discussion = discussionFor(active);
+    const placedActive = placedById.get(active.id);
     return (
       <RevisionInspector
+        key={active.id}
         slot={slot}
         item={active}
         ops={placedById.get(active.id)?.ops ?? null}
@@ -339,6 +356,19 @@ export default function CompositionReview({
           setChosenMode('track');
         }}
         onRemoveTag={canEdit ? onRemoveTag : undefined}
+        onAddTag={
+          canEdit && onAddTag
+            ? (lbl) =>
+                onAddTag({
+                  ...lbl,
+                  original_text: placedActive ? text.slice(placedActive.start, placedActive.end) : active.original,
+                  suggested_revision: placedActive ? placedActive.revised : active.revised,
+                  explanation: active.explanation,
+                })
+            : undefined
+        }
+        onUpdateTag={canEdit ? onUpdateTag : undefined}
+        labelSuggestions={labelSuggestions}
       />
     );
   };

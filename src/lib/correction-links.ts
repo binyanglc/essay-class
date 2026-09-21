@@ -19,6 +19,8 @@ export interface CorrectionLink {
 interface TagLike {
   id: string;
   original_text: string;
+  /** Helps pick the right correction when several contain the label's words. */
+  suggested_revision?: string;
 }
 
 /** Correction numbers in reading order (placed ones first, then the ones that couldn't be placed). */
@@ -27,15 +29,36 @@ export function numberCorrections(placement: Placement<Revision>): Map<string, n
   return new Map(ordered.map((r, i) => [r.id, i + 1] as [string, number]));
 }
 
-/** Tag id → id of the correction it belongs to. */
+/**
+ * Tag id → id of the correction it belongs to. When several corrections
+ * contain the label's words (a single character, say), the closest one wins:
+ * the same words first, then a correction whose suggestion has the label's fix.
+ */
 export function linkTags(text: string, placement: Placement<Revision>, tags: TagLike[]): Map<string, string> {
   const links = new Map<string, string>();
   for (const tag of tags) {
     if (!tag.original_text) continue;
-    const hit =
-      placement.placed.find((p) => containsLoosely(text.slice(p.start, p.end), tag.original_text)) ??
-      placement.placed.find((p) => containsLoosely(tag.original_text, text.slice(p.start, p.end)));
-    if (hit) links.set(tag.id, hit.rev.id);
+    let best: string | undefined;
+    let bestScore = 0;
+    for (const p of placement.placed) {
+      const span = text.slice(p.start, p.end);
+      const inside = containsLoosely(span, tag.original_text);
+      const around = containsLoosely(tag.original_text, span);
+      if (!inside && !around) continue;
+      let score = inside && around ? 4 : inside ? 2 : 1;
+      if (tag.suggested_revision && containsLoosely(p.revised, tag.suggested_revision)) score += 1;
+      if (score > bestScore) {
+        best = p.rev.id;
+        bestScore = score;
+      }
+    }
+    // A correction whose quote wasn't found in the composition keeps its labels too
+    if (!best) {
+      best = placement.unplaced.find(
+        (u) => containsLoosely(u.rev.original, tag.original_text) || containsLoosely(tag.original_text, u.rev.original)
+      )?.rev.id;
+    }
+    if (best) links.set(tag.id, best);
   }
   return links;
 }

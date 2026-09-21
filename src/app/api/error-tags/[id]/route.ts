@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ERROR_TAG_TYPES } from '@/types';
 
 export async function PUT(
   request: NextRequest,
@@ -17,6 +18,13 @@ export async function PUT(
     const updates: Record<string, string> = {};
     for (const key of allowedFields) {
       if (key in body) updates[key] = body[key];
+    }
+    // A teacher can move a label to another category
+    if ('error_type' in body) {
+      if (!(ERROR_TAG_TYPES as readonly string[]).includes(body.error_type)) {
+        return NextResponse.json({ error: 'Invalid error_type' }, { status: 400 });
+      }
+      updates.error_type = body.error_type;
     }
 
     if (Object.keys(updates).length === 0) {
