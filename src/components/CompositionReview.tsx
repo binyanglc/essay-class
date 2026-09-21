@@ -66,6 +66,8 @@ export default function CompositionReview({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [attachId, setAttachId] = useState<string | null>(null);
+  // The list repeats what the essay shows, so it starts folded
+  const [showList, setShowList] = useState(false);
   const [ownComments, setOwnComments] = useState<FeedbackComment[]>([]);
   const [commentsVersion, setCommentsVersion] = useState(0);
 
@@ -498,9 +500,20 @@ export default function CompositionReview({
       </div>
 
       {revs && ordered.length > 0 && (
-        <section className="mt-5">
-          <h4 className="mb-2 text-sm font-semibold text-gray-700">All corrections ({ordered.length})</h4>
-          <ol className="space-y-2">
+        <section className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="text-sm font-semibold text-gray-700">All corrections ({ordered.length})</h4>
+            <button
+              type="button"
+              aria-expanded={showList}
+              onClick={() => setShowList((v) => !v)}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              {showList ? 'Hide list' : 'Show as a list'}
+            </button>
+          </div>
+          {showList && (
+          <ol className="mt-2 space-y-2">
             {ordered.map((r) => {
               const p = placedById.get(r.id);
               const commentCount = feedbackId ? comments.filter((c) => c.section === commentKeyFor(r)).length : 0;
@@ -523,9 +536,11 @@ export default function CompositionReview({
                       <span className="block leading-7 text-gray-800">
                         {p ? <DiffOps ops={p.ops} /> : `${r.original} → ${r.revised}`}
                       </span>
-                      <span className="mt-0.5 line-clamp-2 block text-xs leading-relaxed text-gray-500">
-                        {r.explanation || 'No explanation yet'}
-                      </span>
+                      {r.explanation && (
+                        <span className="mt-0.5 line-clamp-2 block text-xs leading-relaxed text-gray-500">
+                          {r.explanation}
+                        </span>
+                      )}
                     </span>
                     {commentCount > 0 && (
                       <span className="shrink-0 self-start rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
@@ -537,6 +552,7 @@ export default function CompositionReview({
               );
             })}
           </ol>
+          )}
         </section>
       )}
 

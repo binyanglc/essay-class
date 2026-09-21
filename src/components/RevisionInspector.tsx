@@ -135,23 +135,33 @@ export default function RevisionInspector(props: Props) {
           )}
         </div>
 
+        {(editing || item.explanation) && (
         <div>
           <p className={label}>Why</p>
           {editing ? (
+            <>
             <textarea
               id={`${slot}-why-${item.id}`}
               value={editing.explanation}
               onChange={(e) => props.onDraft({ ...editing, explanation: e.target.value })}
               rows={4}
-              placeholder="Explain the correction for the student"
+              placeholder="Optional — explain the correction for the student"
               className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {!editing.isNew &&
+              editing.revised !== editing.baseRevised &&
+              editing.explanation === editing.baseExplanation &&
+              !!editing.explanation.trim() && (
+                <p className="mt-1 text-[11px] leading-snug text-amber-700">
+                  You changed the suggestion — check that the explanation still matches it.
+                </p>
+              )}
+            </>
           ) : (
-            <p className="mt-1 whitespace-pre-line leading-relaxed text-gray-700">
-              {item.explanation || <span className="italic text-gray-400">No explanation yet</span>}
-            </p>
+            <p className="mt-1 whitespace-pre-line leading-relaxed text-gray-700">{item.explanation}</p>
           )}
         </div>
+        )}
 
         {canEdit &&
           (editing ? (
