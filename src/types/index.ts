@@ -41,12 +41,39 @@ export interface Class {
   created_at: string;
 }
 
+/** How strictly the AI corrects a composition (set per project by the teacher). */
+export type CorrectionLevel = 'essential' | 'standard' | 'detailed';
+
+export const CORRECTION_LEVELS: { value: CorrectionLevel; label: string; hint: string }[] = [
+  {
+    value: 'essential',
+    label: 'Essential',
+    hint: 'Only clear mistakes. Sentences that are understandable and grammatical are left alone.',
+  },
+  {
+    value: 'standard',
+    label: 'Standard',
+    hint: 'Mistakes plus phrasing that is clearly unnatural. Acceptable sentences are left alone.',
+  },
+  {
+    value: 'detailed',
+    label: 'Detailed',
+    hint: 'Also suggests more natural phrasing, at the student’s level.',
+  },
+];
+
+export function isCorrectionLevel(v: unknown): v is CorrectionLevel {
+  return v === 'essential' || v === 'standard' || v === 'detailed';
+}
+
 export interface Project {
   id: string;
   class_id: string;
   project_name: string;
   description: string;
   due_date: string | null;
+  /** Added in migration v9; older rows default to 'standard'. */
+  correction_level?: CorrectionLevel;
   created_at: string;
 }
 
@@ -65,7 +92,10 @@ export interface Submission {
   project_id: string | null;
   title: string | null;
   assignment_name: string | null;
+  /** Legacy public URL (before migration v9). */
   image_url: string | null;
+  /** Storage path of the uploaded photo in the private `compositions` bucket. */
+  image_path?: string | null;
   ocr_text: string | null;
   final_text: string;
   created_at: string;
@@ -89,6 +119,8 @@ export interface Feedback {
   repeated_error_summary: string;
   next_step_advice: string;
   teacher_edited_at: string | null;
+  /** Level the AI used; null for older feedback (which only corrected a few key sentences). */
+  correction_level?: CorrectionLevel | null;
   created_at: string;
 }
 
@@ -96,6 +128,15 @@ export interface SentenceRevision {
   original: string;
   revised: string;
   explanation: string;
+  /** Stable id; older feedback gets one when it is first loaded (see lib/revisions). */
+  id?: string;
+  /** [start, end) of `original` in the composition, when known. */
+  start?: number;
+  end?: number;
+  /** Who suggested it. */
+  source?: 'ai' | 'teacher';
+  /** Comment section key for revisions created before ids existed (e.g. "sentence_2"). */
+  commentKey?: string;
 }
 
 export interface ErrorTag {

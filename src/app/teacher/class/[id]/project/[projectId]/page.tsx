@@ -1,23 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Project, Submission, Feedback, ErrorTag, Profile, ErrorType, FeedbackComment } from '@/types';
+import {
+  Project,
+  Submission,
+  Feedback,
+  ErrorTag,
+  Profile,
+  ErrorType,
+  FeedbackComment,
+  SentenceRevision,
+  CorrectionLevel,
+  CORRECTION_LEVELS,
+} from '@/types';
 import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
+import CompositionReview from '@/components/CompositionReview';
+import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 
 interface ClassError {
   error_type: ErrorType;
   count: number;
   examples: { id: string; original: string; revision: string; explanation: string }[];
-}
-
-interface SentenceRevision {
-  original: string;
-  revised: string;
-  explanation: string;
 }
 
 export default function ProjectDetailPage() {
@@ -38,6 +45,7 @@ export default function ProjectDetailPage() {
   const [projNameDraft, setProjNameDraft] = useState('');
   const [projDescDraft, setProjDescDraft] = useState('');
   const [projDueDraft, setProjDueDraft] = useState('');
+  const [projLevelDraft, setProjLevelDraft] = useState<CorrectionLevel>('standard');
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
@@ -92,9 +100,18 @@ export default function ProjectDetailPage() {
   }
 
   const [selectedComments, setSelectedComments] = useState<FeedbackComment[]>([]);
+  const latestSelection = useRef<string | null>(null);
 
   const handleSelectSubmission = async (sub: Submission) => {
+    if (sub.id === selectedSub?.id) return;
+    const unsaved = Object.keys(editing).length > 0 || editingRevisions !== null;
+    if (unsaved && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
+
+    latestSelection.current = sub.id;
     setSelectedSub(sub);
+    setSelectedFeedback(null);
+    setSelectedTags([]);
+    setSelectedComments([]);
     setEditing({});
     setEditingRevisions(null);
 
@@ -103,12 +120,14 @@ export default function ProjectDetailPage() {
       .select('*')
       .eq('submission_id', sub.id)
       .single();
+    if (latestSelection.current !== sub.id) return;
     setSelectedFeedback(fb);
 
     const { data: tags } = await supabase
       .from('error_tags')
       .select('*')
       .eq('submission_id', sub.id);
+    if (latestSelection.current !== sub.id) return;
     setSelectedTags(tags || []);
 
     if (fb) {
@@ -122,7 +141,7 @@ export default function ProjectDetailPage() {
     const res = await fetch(`/api/feedback/${feedbackId}/comments`);
     if (res.ok) {
       const data = await res.json();
-      setSelectedComments(data);
+      setSelectedComments(Array.isArray(data) ? data : []);
     }
   };
 
@@ -167,6 +186,7 @@ export default function ProjectDetailPage() {
         projectName: projNameDraft,
         description: projDescDraft,
         dueDate: projDueDraft || null,
+        correctionLevel: projLevelDraft,
       }),
     });
     if (res.ok) {
@@ -196,6 +216,14 @@ export default function ProjectDetailPage() {
   };
 
   const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null;
+
+  // Warn before leaving the page with unsaved feedback edits
+  useEffect(() => {
+    if (!hasEdits) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasEdits]);
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!project) return <p className="text-red-500">Project not found</p>;
@@ -236,6 +264,7 @@ export default function ProjectDetailPage() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
+            <CorrectionLevelSelect id="project-correction-level" value={projLevelDraft} onChange={setProjLevelDraft} />
             <div className="flex gap-2">
               <button
                 onClick={handleEditProject}
@@ -262,6 +291,7 @@ export default function ProjectDetailPage() {
                   setProjNameDraft(project.project_name);
                   setProjDescDraft(project.description || '');
                   setProjDueDraft(project.due_date ? new Date(project.due_date).toISOString().slice(0, 16) : '');
+                  setProjLevelDraft(project.correction_level ?? 'standard');
                 }}
                 className="text-xs text-gray-400 hover:text-blue-600"
                 title="Edit project"
@@ -277,6 +307,10 @@ export default function ProjectDetailPage() {
                 Due: {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
               </p>
             )}
+            <p className="text-xs mt-1 text-gray-400">
+              AI corrections:{' '}
+              {CORRECTION_LEVELS.find((l) => l.value === (project.correction_level ?? 'standard'))?.label}
+            </p>
             <button
               onClick={handleDeleteProject}
               className="text-xs text-red-400 hover:text-red-600 mt-2"
@@ -302,15 +336,16 @@ export default function ProjectDetailPage() {
         </section>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
+      {/* Narrow list on the left, wide review area on the right (desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 items-start">
+        <section className="bg-white rounded-xl border border-gray-200 p-4 lg:sticky lg:top-20">
           <h2 className="font-semibold mb-3">
             Submissions ({submissions.length})
           </h2>
           {submissions.length === 0 ? (
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+            <div className="space-y-2 max-h-[600px] lg:max-h-[calc(100vh-11rem)] overflow-y-auto">
               {submissions.map((sub) => {
                 const profile = sub.profiles as unknown as Profile;
                 return (
@@ -377,11 +412,20 @@ export default function ProjectDetailPage() {
                 )}
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
-                <p className="whitespace-pre-wrap line-clamp-6">
-                  {selectedSub.final_text}
-                </p>
-              </div>
+              <CompositionReview
+                key={selectedSub.id}
+                text={selectedSub.final_text}
+                imagePath={selectedSub.image_path}
+                revisions={selectedFeedback ? editingRevisions ?? selectedFeedback.sentence_revisions ?? [] : null}
+                partial={!!selectedFeedback && !selectedFeedback.correction_level}
+                errorTags={selectedTags}
+                role="teacher"
+                feedbackId={selectedFeedback?.id}
+                comments={selectedComments}
+                onRefreshComments={() => selectedFeedback && loadCommentsForFeedback(selectedFeedback.id)}
+                onChangeRevisions={selectedFeedback ? setEditingRevisions : undefined}
+                className="mb-6"
+              />
 
               {selectedFeedback ? (
                 <div>
@@ -395,9 +439,7 @@ export default function ProjectDetailPage() {
                     feedback={selectedFeedback}
                     errorTags={selectedTags}
                     editing={editing}
-                    editingRevisions={editingRevisions}
                     onEdit={handleEditField}
-                    onEditRevisions={setEditingRevisions}
                     comments={selectedComments}
                     onRefreshComments={() => loadCommentsForFeedback(selectedFeedback.id)}
                   />
@@ -413,6 +455,19 @@ export default function ProjectDetailPage() {
           )}
         </section>
       </div>
+
+      {hasEdits && (
+        <div className="fixed bottom-5 right-5 z-50 hidden items-center gap-3 rounded-full bg-gray-900 py-2 pl-4 pr-2 text-sm text-white shadow-lg lg:flex">
+          <span>Unsaved changes</span>
+          <button
+            onClick={handleSaveEdits}
+            disabled={saving}
+            className="rounded-full bg-green-600 px-3 py-1 text-sm hover:bg-green-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,18 +476,14 @@ function EditableFeedback({
   feedback,
   errorTags,
   editing,
-  editingRevisions,
   onEdit,
-  onEditRevisions,
   comments,
   onRefreshComments,
 }: {
   feedback: Feedback;
   errorTags: ErrorTag[];
   editing: Record<string, string>;
-  editingRevisions: SentenceRevision[] | null;
   onEdit: (field: string, value: string) => void;
-  onEditRevisions: (revisions: SentenceRevision[] | null) => void;
   comments: FeedbackComment[];
   onRefreshComments: () => void;
 }) {
@@ -447,39 +498,6 @@ function EditableFeedback({
   const vocabErrors = groupedErrors.get('vocabulary') || [];
   const grammarErrors = groupedErrors.get('grammar') || [];
 
-  const editableFields = [
-    { key: 'overall_comment', label: 'Overall Assessment', value: feedback.overall_comment },
-    { key: 'characters_comment', label: 'Characters', value: feedback.characters_comment },
-    { key: 'vocabulary_comment', label: 'Vocabulary & Word Choice', value: feedback.vocabulary_comment },
-    { key: 'grammar_comment', label: 'Grammar', value: feedback.grammar_comment },
-    { key: 'content_feedback', label: 'Content & Ideas', value: feedback.content_feedback },
-    { key: 'structure_feedback', label: 'Organization & Structure', value: feedback.structure_feedback },
-  ];
-
-  const revisions: SentenceRevision[] = editingRevisions ?? feedback.sentence_revisions ?? [];
-  const isEditingRevisions = editingRevisions !== null;
-
-  const startEditingRevisions = () => {
-    onEditRevisions([...(feedback.sentence_revisions || [])]);
-  };
-
-  const updateRevision = (index: number, field: keyof SentenceRevision, value: string) => {
-    if (!editingRevisions) return;
-    const updated = [...editingRevisions];
-    updated[index] = { ...updated[index], [field]: value };
-    onEditRevisions(updated);
-  };
-
-  const deleteRevision = (index: number) => {
-    if (!editingRevisions) return;
-    onEditRevisions(editingRevisions.filter((_, i) => i !== index));
-  };
-
-  const addRevision = () => {
-    const current = editingRevisions || [...(feedback.sentence_revisions || [])];
-    onEditRevisions([...current, { original: '', revised: '', explanation: '' }]);
-  };
-
   return (
     <div className="space-y-5">
       {/* Editable text fields: Overall */}
@@ -491,93 +509,6 @@ function EditableFeedback({
         onEdit={onEdit}
       />
       <TeacherCommentThread feedbackId={feedback.id} section="overall" comments={comments} onRefresh={onRefreshComments} />
-
-      {/* Sentence Corrections — full view with edit capability */}
-      <section>
-        <div className="flex justify-between items-center mb-2">
-          <h4 className="text-sm font-semibold text-gray-700">Sentence Corrections</h4>
-          {!isEditingRevisions ? (
-            <button
-              onClick={startEditingRevisions}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              Edit
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-orange-600">Editing</span>
-              <button
-                onClick={addRevision}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                + Add
-              </button>
-            </div>
-          )}
-        </div>
-
-        {revisions.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">No sentence corrections</p>
-        ) : (
-          <div className="space-y-3">
-            {revisions.map((rev, i) =>
-              isEditingRevisions ? (
-                <div key={i} className="bg-blue-50 p-3 rounded-lg border border-blue-200 space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="text-xs text-gray-500 font-medium">#{i + 1}</span>
-                    <button
-                      onClick={() => deleteRevision(i)}
-                      className="text-xs text-red-500 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Original</label>
-                    <textarea
-                      value={rev.original}
-                      onChange={(e) => updateRevision(i, 'original', e.target.value)}
-                      rows={2}
-                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Revised</label>
-                    <textarea
-                      value={rev.revised}
-                      onChange={(e) => updateRevision(i, 'revised', e.target.value)}
-                      rows={2}
-                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Explanation</label>
-                    <textarea
-                      value={rev.explanation}
-                      onChange={(e) => updateRevision(i, 'explanation', e.target.value)}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div key={i}>
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    <div className="text-sm">
-                      <span className="text-red-600 line-through">{rev.original}</span>
-                    </div>
-                    <div className="text-sm mt-1">
-                      <span className="text-green-700">&rarr; {rev.revised}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">{rev.explanation}</p>
-                  </div>
-                  <TeacherCommentThread feedbackId={feedback.id} section={`sentence_${i}`} comments={comments} onRefresh={onRefreshComments} />
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </section>
 
       {/* Characters with error tags */}
       <section>

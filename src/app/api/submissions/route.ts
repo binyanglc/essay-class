@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateFeedback } from '@/lib/ai-feedback';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
+import { anchorRevisions } from '@/lib/revisions';
+import { isCorrectionLevel } from '@/types';
+import type { CorrectionLevel } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,22 +18,30 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { classId, projectId, title, assignmentName, imageUrl, ocrText, finalText } = body;
+    const { classId, projectId, title, assignmentName, imagePath, ocrText, finalText } = body;
 
     if (!finalText || !classId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // If projectId provided, look up project name for assignment_name
+    // A photo must be in the student's own storage folder (also enforced by RLS, migration v10)
+    const safeImagePath =
+      typeof imagePath === 'string' && imagePath.startsWith(`${user.id}/`) && !imagePath.includes('..')
+        ? imagePath
+        : null;
+
+    // If projectId provided, look up project name for assignment_name and the teacher's correction level
     let resolvedAssignment = assignmentName || null;
+    let correctionLevel: CorrectionLevel = 'standard';
     if (projectId) {
       const { data: project } = await supabase
         .from('projects')
-        .select('project_name')
+        .select('project_name, correction_level')
         .eq('id', projectId)
         .single();
       if (project) {
         resolvedAssignment = project.project_name;
+        if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
       }
     }
 
@@ -42,7 +53,8 @@ export async function POST(request: NextRequest) {
         project_id: projectId || null,
         title: title || null,
         assignment_name: resolvedAssignment,
-        image_url: imageUrl || null,
+        image_url: null,
+        image_path: safeImagePath,
         ocr_text: ocrText || null,
         final_text: finalText,
       })
@@ -67,7 +79,8 @@ export async function POST(request: NextRequest) {
       feedbackData = await generateFeedback(
         finalText,
         errorPatterns,
-        previousCount ?? 0
+        previousCount ?? 0,
+        correctionLevel
       );
     } catch (aiError) {
       console.error('AI feedback error:', aiError);
@@ -90,9 +103,10 @@ export async function POST(request: NextRequest) {
         grammar_comment: feedbackData.grammar_comment || '',
         content_feedback: feedbackData.content_feedback || '',
         structure_feedback: feedbackData.structure_feedback || '',
-        sentence_revisions: feedbackData.sentence_revisions || [],
+        sentence_revisions: anchorRevisions(finalText, feedbackData.sentence_revisions),
         repeated_error_summary: '',
         next_step_advice: '',
+        correction_level: correctionLevel,
       })
       .select()
       .single();

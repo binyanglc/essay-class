@@ -54,7 +54,7 @@ export default function SubmissionForm({ classId, projectId }: Props) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [ocrText, setOcrText] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imagePath, setImagePath] = useState('');
   const [loading, setLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,23 +73,29 @@ export default function SubmissionForm({ classId, projectId }: Props) {
 
     setOcrLoading(true);
     setError('');
+    setImagePath('');
 
+    // Keep the original photo for the teacher: private bucket, student's own folder.
+    // If this fails, OCR still runs — the submission just won't have the photo attached.
+    let photoSaved = false;
     try {
-      // Upload original to storage
       const supabase = createClient();
-      const fileName = `${Date.now()}_${file.name}`;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+      const ext = file.type === 'image/png' ? 'png' : 'jpg';
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('compositions')
-        .upload(fileName, file);
-
+        .upload(`${user.id}/${Date.now()}.${ext}`, file, { contentType: file.type });
       if (uploadError) throw uploadError;
+      setImagePath(uploadData.path);
+      photoSaved = true;
+    } catch (err) {
+      console.error('Photo upload error:', err);
+    }
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('compositions').getPublicUrl(uploadData.path);
-
-      setImageUrl(publicUrl);
-
+    try {
       // Compress for OCR (must be under 1MB for free API)
       const base64 = await compressImage(file);
 
@@ -103,12 +109,15 @@ export default function SubmissionForm({ classId, projectId }: Props) {
       if (data.text) {
         setOcrText(data.text);
         setText(data.text);
+        if (!photoSaved) {
+          setError('The text was recognized, but the photo could not be saved for your teacher (max 10 MB, JPG or PNG).');
+        }
       } else {
         setError(data.error || 'OCR recognition failed. You can type your text manually below.');
       }
     } catch (err) {
-      console.error('Upload error:', err);
-      setError('Image upload failed. You can type your text manually below.');
+      console.error('OCR error:', err);
+      setError('Text recognition failed. You can type your text manually below.');
     }
     setOcrLoading(false);
   };
@@ -130,7 +139,7 @@ export default function SubmissionForm({ classId, projectId }: Props) {
           classId,
           projectId: projectId || undefined,
           title: title || undefined,
-          imageUrl: imageUrl || undefined,
+          imagePath: imagePath || undefined,
           ocrText: ocrText || undefined,
           finalText: text,
         }),
@@ -184,7 +193,7 @@ export default function SubmissionForm({ classId, projectId }: Props) {
         >
           {ocrLoading ? 'Recognizing text...' : 'Click to upload image'}
         </button>
-        {imageUrl && (
+        {imagePath && (
           <p className="text-xs text-green-600 mt-2">
             Image uploaded. OCR text has been filled in below.
           </p>

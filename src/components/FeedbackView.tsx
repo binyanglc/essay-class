@@ -64,33 +64,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
         />
       </section>
 
-      {/* Sentence Corrections */}
-      {feedback.sentence_revisions && feedback.sentence_revisions.length > 0 && (
-        <section>
-          <h3 className="font-semibold text-gray-900 mb-3">Sentence Corrections</h3>
-          <div className="space-y-3">
-            {feedback.sentence_revisions.map((rev, i) => (
-              <div key={i}>
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                  <div className="text-sm">
-                    <span className="text-red-600 line-through">{rev.original}</span>
-                  </div>
-                  <div className="text-sm mt-1">
-                    <span className="text-green-700">&rarr; {rev.revised}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">{rev.explanation}</p>
-                </div>
-                <CommentThread
-                  feedbackId={feedback.id}
-                  section={`sentence_${i}`}
-                  comments={commentsForSection(`sentence_${i}`)}
-                  onRefresh={loadComments}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Sentence corrections are shown with the composition (CompositionReview) */}
 
       {/* Characters */}
       <section>
@@ -191,7 +165,7 @@ export default function FeedbackView({ feedback, errorTags }: Props) {
   );
 }
 
-function CommentThread({
+export function CommentThread({
   feedbackId,
   section,
   comments,

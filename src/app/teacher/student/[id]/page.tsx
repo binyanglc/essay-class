@@ -8,6 +8,7 @@ import { Profile, Submission, Feedback, ErrorTag, ErrorFrequency, ErrorType } fr
 import { getStudentErrorHistory } from '@/lib/error-tracking';
 import ErrorSummary from '@/components/ErrorSummary';
 import FeedbackView from '@/components/FeedbackView';
+import CompositionReview from '@/components/CompositionReview';
 
 export default function TeacherStudentDetailPage() {
   const { id: studentId } = useParams();
@@ -59,6 +60,8 @@ export default function TeacherStudentDetailPage() {
 
   const handleSelectSubmission = async (sub: Submission) => {
     setSelectedSub(sub);
+    setSelectedFeedback(null);
+    setSelectedTags([]);
     const { data: fb } = await supabase
       .from('feedback')
       .select('*')
@@ -96,15 +99,16 @@ export default function TeacherStudentDetailPage() {
         <ErrorSummary errors={errors} title="Student Error Summary" />
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
+      {/* Narrow list on the left, wide review area on the right (desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 items-start">
+        <section className="bg-white rounded-xl border border-gray-200 p-4 lg:sticky lg:top-20">
           <h2 className="font-semibold mb-3">
             Submissions ({submissions.length})
           </h2>
           {submissions.length === 0 ? (
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-2 max-h-96 lg:max-h-[calc(100vh-11rem)] overflow-y-auto">
               {submissions.map((sub) => (
                 <button
                   key={sub.id}
@@ -140,11 +144,17 @@ export default function TeacherStudentDetailPage() {
                   selectedSub.assignment_name ||
                   'Untitled'}
               </h2>
-              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
-                <p className="whitespace-pre-wrap line-clamp-6">
-                  {selectedSub.final_text}
-                </p>
-              </div>
+              <CompositionReview
+                key={selectedSub.id}
+                text={selectedSub.final_text}
+                imagePath={selectedSub.image_path}
+                revisions={selectedFeedback ? selectedFeedback.sentence_revisions ?? [] : null}
+                partial={!!selectedFeedback && !selectedFeedback.correction_level}
+                errorTags={selectedTags}
+                role="teacher"
+                feedbackId={selectedFeedback?.id}
+                className="mb-6"
+              />
               {selectedFeedback ? (
                 <FeedbackView feedback={selectedFeedback} errorTags={selectedTags} />
               ) : (

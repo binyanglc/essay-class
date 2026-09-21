@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ClassMember, Project, Profile } from '@/types';
+import { Class, ClassMember, Project, Profile, CorrectionLevel } from '@/types';
+import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -17,6 +18,7 @@ export default function ClassDetailPage() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
+  const [newLevel, setNewLevel] = useState<CorrectionLevel>('standard');
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -81,12 +83,14 @@ export default function ClassDetailPage() {
         projectName: newName,
         description: newDesc,
         dueDate: newDueDate || null,
+        correctionLevel: newLevel,
       }),
     });
     if (res.ok) {
       setNewName('');
       setNewDesc('');
       setNewDueDate('');
+      setNewLevel('standard');
       setShowForm(false);
       loadAll();
     }
@@ -254,6 +258,7 @@ export default function ClassDetailPage() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
             </div>
+            <CorrectionLevelSelect id="new-project-correction-level" value={newLevel} onChange={setNewLevel} />
             <div className="flex gap-2">
               <button
                 onClick={handleCreateProject}
@@ -263,7 +268,7 @@ export default function ClassDetailPage() {
                 {creating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); }}
+                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); }}
                 className="text-sm text-gray-500 px-4 py-2"
               >
                 Cancel

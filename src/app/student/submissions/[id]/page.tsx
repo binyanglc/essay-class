@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Submission, Feedback, ErrorTag } from '@/types';
 import FeedbackView from '@/components/FeedbackView';
+import CompositionReview from '@/components/CompositionReview';
 
 export default function SubmissionDetailPage() {
   const { id } = useParams();
@@ -75,12 +76,16 @@ export default function SubmissionDetailPage() {
           </span>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Your Composition</h3>
-          <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-            {submission.final_text}
-          </p>
-        </div>
+        <CompositionReview
+          text={submission.final_text}
+          imagePath={submission.image_path}
+          revisions={feedback ? feedback.sentence_revisions ?? [] : null}
+          partial={!!feedback && !feedback.correction_level}
+          errorTags={errorTags}
+          role="student"
+          feedbackId={feedback?.id}
+          label="Your Composition"
+        />
       </div>
 
       {feedback ? (

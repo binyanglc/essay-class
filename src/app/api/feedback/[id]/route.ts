@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeRevisions } from '@/lib/revisions';
 
 export async function PUT(
   request: NextRequest,
@@ -34,8 +35,9 @@ export async function PUT(
       }
     }
 
-    if ('sentence_revisions' in updates && Array.isArray(updates.sentence_revisions)) {
-      safeUpdates.sentence_revisions = updates.sentence_revisions;
+    if ('sentence_revisions' in updates) {
+      const revisions = sanitizeRevisions(updates.sentence_revisions);
+      if (revisions) safeUpdates.sentence_revisions = revisions;
     }
 
     if (Object.keys(safeUpdates).length === 0) {
