@@ -71,3 +71,22 @@ export function rankGrammarPoints(
   const fits = (g: GrammarPoint) => grammarPointWords(g).some((w) => text.includes(w));
   return { fits: points.filter(fits), rest: points.filter((g) => !fits(g)) };
 }
+
+/**
+ * Grammar points a correction may be about, for the AI to choose from: points
+ * whose words appear in the changed text. Longer matching words first (快要
+ * before 要), then lower levels, then syllabus order; at most `max`.
+ */
+export function grammarCandidates(changed: string[], max = 8): GrammarPoint[] {
+  const text = changed.join(' ');
+  if (!text.trim()) return [];
+  const scored: { g: GrammarPoint; score: number; order: number }[] = [];
+  HSK_GRAMMAR_2025.forEach((g, order) => {
+    const hits = grammarPointWords(g).filter((w) => text.includes(w));
+    if (hits.length) scored.push({ g, score: Math.max(...hits.map((w) => w.length)), order });
+  });
+  return scored
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .slice(0, max)
+    .map((x) => x.g);
+}

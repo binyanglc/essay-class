@@ -15,7 +15,10 @@
  *     English punctuation) — the AI's own answer stays in ai_original;
  *   - every correction gets a label: skipped ones are asked about again, and
  *     still-unlabelled ones get a rule-based label when their changes allow;
- *   - English punctuation counts once per essay.
+ *   - English punctuation counts once per essay;
+ *   - a label may name a 2025 HSK grammar point, chosen from the points whose
+ *     words the correction changed (lib/hsk-grammar); one outside that list,
+ *     or not under the label's code, is dropped.
  */
 
 import type { CorrectionLevel } from '@/types';
@@ -40,6 +43,15 @@ import type { Nature, Operation, Severity } from './error-taxonomy';
 import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind } from './label-rules';
 import type { PositionedChange, RuleKind } from './label-rules';
 import { samplingParams, usageFrom } from './ai-models';
+import {
+  getGrammarPoint,
+  grammarCandidates,
+  grammarPointName,
+  grammarPointPath,
+  grammarPointsFor,
+  levelLabel,
+} from './hsk-grammar';
+import type { GrammarPoint } from './hsk-grammar';
 import type { AiUsage, ReasoningEffort } from './ai-models';
 
 /**
@@ -73,6 +85,8 @@ export interface RawLabel {
   problem?: string;
   code: string;
   rule: string | null;
+  /** A 2025 HSK grammar point id from the correction's list, or null. */
+  grammar_point?: string | null;
   nature: string;
   severity: string;
   note: string;
@@ -85,6 +99,7 @@ export interface AiTagRow {
   rule: string | null;
   item_target: string | null;
   item_learner: string | null;
+  grammar_point: string | null;
   nature: Nature;
   severity: Severity | null;
   operation: Operation | null;
@@ -105,6 +120,23 @@ export interface AiTagRow {
 /** The separate changes in a correction, in order. */
 export function changesIn(original: string, revised: string): Change[] {
   return changesAt(original, revised).map(({ learner, target }) => ({ learner, target }));
+}
+
+const doubled = (s: string) => (s.match(/([\u4e00-\u9fff])\1/g) ?? []).length;
+
+/**
+ * 2025 HSK grammar points a correction may be about: those whose words its
+ * changes touch, plus the reduplication points (AA, AABB …, which have no
+ * words to match) when the correction adds or removes a doubled character.
+ */
+export function grammarCandidatesFor(rev: RevisionForTagging): GrammarPoint[] {
+  const redup = doubled(rev.original) !== doubled(rev.revised) ? grammarPointsFor('GRAM.REDUP') : [];
+  const byWords = grammarCandidates(changesIn(rev.original, rev.revised).flatMap((c) => [c.learner, c.target]));
+  return [...redup, ...byWords.filter((g) => !redup.includes(g))].slice(0, 10);
+}
+
+function describeGrammarPoint(g: GrammarPoint): string {
+  return `${g.id} ${grammarPointName(g)} [${levelLabel(g)} · ${grammarPointPath(g)}]`;
 }
 
 function describeChange(c: Change): string {
@@ -138,15 +170,15 @@ const EXAMPLES = `
 1. 我明天在来。 → 我明天再来。
    ⇒ "在" / "再" — 在 and 再 are both read zài: a same-sounding character ⇒ CHAR.SOUND
 2. 我昨天没去了。 → 我昨天没去。
-   ⇒ "了" / "" — extra 了 in a sentence negated with 没 ⇒ GRAM.LE, rule R.LE.NEG   (not GRAM.NEG: 没 was right)
+   ⇒ "了" / "" — extra 了 in a sentence negated with 没 ⇒ GRAM.LE, rule R.LE.NEG, grammar point H25-1-025 (了¹)   (not GRAM.NEG: 没 was right)
 3. 我昨天很累了。 → 我昨天很累。
-   ⇒ "了" / "" — 了 after an adjective describing a past state ⇒ GRAM.LE, rule R.LE.STATE
+   ⇒ "了" / "" — 了 after an adjective describing a past state ⇒ GRAM.LE, rule R.LE.STATE, grammar point null (了¹ or 了²? unclear)
 4. 他跑的很快。 → 他跑得很快。
-   ⇒ "的" / "得" — 得 before a degree complement ⇒ GRAM.DE
+   ⇒ "的" / "得" — 得 before a degree complement ⇒ GRAM.DE, grammar point H25-2-030 (得、地)
 5. 我放书在桌子上。 → 我把书放在桌子上。
-   ⇒ "放书在" / "把书放在" — verb + 在 + place needs a 把 sentence ⇒ GRAM.BA, rule R.BA.NEEDED   (one label for the whole change)
+   ⇒ "放书在" / "把书放在" — verb + 在 + place needs a 把 sentence ⇒ GRAM.BA, rule R.BA.NEEDED, grammar point H25-3-067 (主语+把+宾语+动词+在/到+处所)   (one label for the whole change)
 6. 你什么时候来了？ → 你是什么时候来的？
-   ⇒ "来了" / "是什么时候来的" — asking when a past event happened ⇒ GRAM.SHIDE, rule R.SHIDE.FOCUS   (not GRAM.LE)
+   ⇒ "来了" / "是什么时候来的" — asking when a past event happened ⇒ GRAM.SHIDE, rule R.SHIDE.FOCUS, grammar point H25-2-065   (not GRAM.LE)
 7. 我知道他三年了。 → 我认识他三年了。
    ⇒ "知道" / "认识" — 认识 is for knowing a person ⇒ VOC.CHOICE
 8. 我喜欢穿帽子。 → 我喜欢戴帽子。
@@ -158,7 +190,15 @@ const EXAMPLES = `
 11. 这个问题挺重要的。 → 这个问题十分重要。
    ⇒ "挺" / "十分" — 挺 is spoken style ⇒ REG.COLLOQ, nature "infelicity"
 12. 我很喜欢这个城市，我觉得我以后会再来。 → 我很喜欢这个城市，以后还会再来。
-   ⇒ "我觉得我" / "" — the subject is repeated where Chinese leaves it out ⇒ DISC.REFER, nature "infelicity"`;
+   ⇒ "我觉得我" / "" — the subject is repeated where Chinese leaves it out ⇒ DISC.REFER, nature "infelicity"
+13. 我的书在桌子。 → 我的书在桌子上。
+   ⇒ "" / "上" — 在 + an object needs a locative word to be a place ⇒ GRAM.LOCATIVE, grammar point H25-1-003   (not GRAM.CONSTIT)
+14. 我有三个好朋友们。 → 我有三个好朋友。
+   ⇒ "们" / "" — no 们 after a number + measure word ⇒ GRAM.AFFIX, grammar point H25-1-002
+15. 每个人都有他们的爱好。 → 每个人都有自己的爱好。
+   ⇒ "他们" / "自己" — 自己 refers back to the subject ⇒ GRAM.PRON, grammar point H25-2-007
+16. 我有二个哥哥。 → 我有两个哥哥。
+   ⇒ "二" / "两" — 两 before a measure word ⇒ GRAM.NUM, grammar point H25-1-011`;
 
 const LEVEL_NOTE: Record<CorrectionLevel, string> = {
   essential: 'The teacher asked for ESSENTIAL corrections only, so every correction fixes a real error: use nature "error".',
@@ -173,7 +213,9 @@ function buildPrompt(revisions: RevisionForTagging[], level: CorrectionLevel, on
     .map((r, i) => {
       const changes = changesIn(r.original, r.revised).map(describeChange).join('; ');
       const why = r.explanation ? `\n    Explanation: ${r.explanation.replace(/\s+/g, ' ').slice(0, 600)}` : '';
-      return `[${i + 1}] Student wrote: ${r.original}\n    Corrected: ${r.revised}\n    Changes: ${changes || '(none)'}${why}`;
+      const points = grammarCandidatesFor(r);
+      const gp = points.length ? `\n    Grammar points: ${points.map(describeGrammarPoint).join('; ')}` : '';
+      return `[${i + 1}] Student wrote: ${r.original}\n    Corrected: ${r.revised}\n    Changes: ${changes || '(none)'}${why}${gp}`;
     })
     .join('\n');
 
@@ -197,6 +239,10 @@ HOW TO DECIDE
    ${LEVEL_NOTE[level]}
 10. Traditional characters used consistently are not an error.
 11. Severity: "global" if the original would confuse a reader; otherwise "local".
+12. 在 / 正在 / 呢 for an action in progress → GRAM.PROG (过 and 着 → GRAM.GUOZHE). Other sentence-final particles (吧, 呢, 啊, 嘛, 啦) → GRAM.PARTICLE; 吗 and question forms → GRAM.QUESTION; 了 → GRAM.LE.
+13. A missing or wrong locative word (上, 里, 下, 中, 边, 以前, 以后 after a noun) → GRAM.LOCATIVE; 们 or another prefix / suffix → GRAM.AFFIX; 二 / 两, dates, times, approximate numbers → GRAM.NUM; pronouns (自己, 咱们, 每, 各, 这么 …) → GRAM.PRON; reduplication (看看, 高高兴兴) → GRAM.REDUP.
+14. 是 / 有 / existential / double-object sentences → GRAM.SPECIAL; serial verbs and 请 / 叫 / 让 / 使 + person + verb → GRAM.SERIAL.
+15. GRAM.FIXED only for a fixed pattern or set phrase itself (除了……以外, 对……来说, 越来越, 一点儿也不 …) when no more specific code fits; connective pairs in complex sentences (虽然……但是, 如果……就) stay GRAM.CONJ.
 
 WORKED EXAMPLES
 ${EXAMPLES}
@@ -208,6 +254,7 @@ FOR EACH LABEL, in this order
 - problem: a few words on what exactly is wrong (e.g. "在 and 再 sound the same", "extra 了 after 没").
 - code: the label that matches the problem.
 - rule: a misuse rule id from the list for this code, or null.
+- grammar_point: if the label is clearly about one of the 2025 HSK grammar points listed under that correction, its id; otherwise null. Only ids from that correction's own list, and only a point that belongs with the code. When unsure (e.g. 了¹ or 了²), null.
 - note: one short sentence in English for the student, about this label only.
 ${onlyMissing ? '\nThese corrections were left without a label before: give EVERY one of them at least one label.\n' : '\nGive EVERY correction at least one label.\n'}
 CORRECTIONS
@@ -217,7 +264,11 @@ ${list}`;
 const NULLABLE_RULE = { anyOf: [{ type: 'string', enum: RULE_IDS }, { type: 'null' }] };
 
 // Property order matters: the model writes the words and the problem before it chooses the code
-const RESPONSE_SCHEMA = {
+function responseSchema(grammarIds: string[]) {
+  const grammarPoint = grammarIds.length
+    ? { anyOf: [{ type: 'string', enum: grammarIds }, { type: 'null' }] }
+    : { type: 'null' };
+  return {
   type: 'object',
   additionalProperties: false,
   required: ['labels'],
@@ -227,7 +278,7 @@ const RESPONSE_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['revision', 'learner_text', 'target_text', 'problem', 'code', 'rule', 'nature', 'severity', 'note'],
+        required: ['revision', 'learner_text', 'target_text', 'problem', 'code', 'rule', 'grammar_point', 'nature', 'severity', 'note'],
         properties: {
           revision: { type: 'integer' },
           learner_text: { type: 'string' },
@@ -235,6 +286,7 @@ const RESPONSE_SCHEMA = {
           problem: { type: 'string' },
           code: { type: 'string', enum: AI_CODE_IDS },
           rule: NULLABLE_RULE,
+          grammar_point: grammarPoint,
           nature: { type: 'string', enum: ['error', 'infelicity', 'variant'] },
           severity: { type: 'string', enum: ['global', 'local'] },
           note: { type: 'string' },
@@ -242,7 +294,14 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-};
+  };
+}
+
+/** The response schema for these corrections (grammar point ids limited to their candidates). */
+export function responseSchemaFor(revisions: RevisionForTagging[]) {
+  const ids = Array.from(new Set(revisions.flatMap((r) => grammarCandidatesFor(r).map((g) => g.id))));
+  return responseSchema(ids);
+}
 
 export interface TaggingOptions {
   apiKey?: string;
@@ -287,7 +346,7 @@ async function requestLabels(
       ],
       response_format: {
         type: 'json_schema',
-        json_schema: { name: 'error_labels', strict: true, schema: RESPONSE_SCHEMA },
+        json_schema: { name: 'error_labels', strict: true, schema: responseSchemaFor(revisions) },
       },
     }),
   });
@@ -340,7 +399,8 @@ function row(
   severity: Severity | null,
   note: string,
   aiOriginal: Record<string, unknown>,
-  model: string
+  model: string,
+  grammarPoint: string | null = null
 ): AiTagRow {
   const info = getCode(code)!;
   const itemTarget = info.item === 'none' ? null : target || null;
@@ -351,10 +411,17 @@ function row(
     rule,
     item_target: itemTarget,
     item_learner: itemLearner,
+    grammar_point: grammarPoint,
     nature,
     severity,
     operation: operationFor(learner, target),
-    pattern_name: canonicalPatternName({ code, rule, item_target: itemTarget, item_learner: itemLearner }),
+    pattern_name: canonicalPatternName({
+      code,
+      rule,
+      item_target: itemTarget,
+      item_learner: itemLearner,
+      grammar_point: grammarPoint,
+    }),
     original_text: rev.original,
     suggested_revision: rev.revised,
     explanation: note,
@@ -400,6 +467,7 @@ export function checkLabels(
   const rows: AiTagRow[] = [];
   const seen = new Set<string>();
   const changesFor = new Map(revisions.map((r) => [r.id, changesAt(r.original, r.revised)]));
+  const pointsFor = new Map(revisions.map((r) => [r.id, new Set(grammarCandidatesFor(r).map((g) => g.id))]));
   const used = new Map(revisions.map((r) => [r.id, new Set<PositionedChange>()]));
 
   for (const l of raw) {
@@ -421,6 +489,7 @@ export function checkLabels(
     const aiOriginal: Record<string, unknown> = {
       code: l.code,
       rule: l.rule,
+      grammar_point: l.grammar_point ?? null,
       learner_text: l.learner_text,
       target_text: l.target_text,
       problem: l.problem,
@@ -453,7 +522,25 @@ export function checkLabels(
     if (kind) nature = 'error';
     if (level === 'essential' && nature === 'infelicity') nature = 'error';
 
-    const r = row(rev, code.code, rule, learner, target, nature, isSeverity(l.severity) ? l.severity : null, clean(l.note, 400), aiOriginal, model);
+    // A grammar point from this correction's list that belongs with the (final) code
+    const gp = typeof l.grammar_point === 'string' ? getGrammarPoint(l.grammar_point) : undefined;
+    const grammarPoint =
+      gp && pointsFor.get(rev.id)!.has(gp.id) && gp.families.includes(code.code) ? gp.id : null;
+    if (l.grammar_point && !grammarPoint) aiOriginal.grammar_point_dropped = true;
+
+    const r = row(
+      rev,
+      code.code,
+      rule,
+      learner,
+      target,
+      nature,
+      isSeverity(l.severity) ? l.severity : null,
+      clean(l.note, 400),
+      aiOriginal,
+      model,
+      grammarPoint
+    );
     // Same label for the same words is one label; the same rule-decided change twice (two 了) is two
     const key = [rev.id, r.code, r.rule ?? '', learner, target, at].join('|');
     if (seen.has(key)) continue;

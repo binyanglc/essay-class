@@ -11,7 +11,7 @@
  *                   an HSK 2025 grammar point (H25-1-025)  → error_tags.grammar_point
  *
  * v1-rc3 (2026-10-07) added 11 grammar codes for the 2025 HSK syllabus
- * (GRAM.PROG … GRAM.FIXED). Teachers can use them; the AI doesn't yet (ai: false).
+ * (GRAM.PROG … GRAM.FIXED), used by teachers and the AI alike.
  *
  * The AI and the teacher both choose from this list, so the same problem is
  * always counted under the same name. A teacher can still give a label their
@@ -218,8 +218,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Progressive aspect: 在 / 正在 before the verb, 呢 at the end. (过 and 着 are GRAM.GUOZHE.)',
     examples: ['*我在吃饭了 → 我在吃饭呢'],
     item: 'none',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.DE',
@@ -283,8 +281,6 @@ export const CODES: CodeInfo[] = [
     definition: '是 sentences, 有 sentences, existential sentences (place + 有 / 是 / verb + 着 + thing) and double-object sentences.',
     examples: ['*在桌子上有一本书 → 桌子上有一本书'],
     item: 'none',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.SERIAL',
@@ -294,8 +290,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Two verb phrases in a row (去商店买东西), and pivot sentences with 请 / 叫 / 让 / 使.',
     examples: ['*这件事使我很高兴了 → 这件事使我很高兴'],
     item: 'none',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.NEG',
@@ -341,8 +335,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Sentence-final particles 吧, 呢, 啊, 嘛, 啦, 罢了 wrong, missing or extra. (吗 and question forms are GRAM.QUESTION; sentence-final 了 is GRAM.LE.)',
     examples: ['*你快来呢！ → 你快来吧！'],
     item: 'word',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.QUESTION',
@@ -361,8 +353,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Personal and demonstrative pronouns: 自己, 咱们, 人家, 每, 各, 任何, 这么, 那样 …',
     examples: ['*每个人都有他们的爱好 → 每个人都有自己的爱好'],
     item: 'pair',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.LOCATIVE',
@@ -372,8 +362,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Locative words missing or wrong: 上, 里, 下, 中, 前, 后, 边, and frames like 在……上 / 在……以前.',
     examples: ['*我的书在桌子 → 我的书在桌子上'],
     item: 'pair',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.NUM',
@@ -383,8 +371,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Numbers (二 / 两), approximate numbers, ordinals, money, dates and clock times, fractions and multiples.',
     examples: ['*我有二个哥哥 → 我有两个哥哥'],
     item: 'pair',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.REDUP',
@@ -394,8 +380,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Reduplicated verbs, adjectives, measure words and numeral + measure phrases (看看, 高高兴兴, 个个).',
     examples: ['*他高兴高兴地走了 → 他高高兴兴地走了'],
     item: 'word',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.AFFIX',
@@ -405,8 +389,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Prefixes and suffixes wrong, missing or extra, including plural 们 (*三个学生们).',
     examples: ['*我有三个好朋友们 → 我有三个好朋友'],
     item: 'word',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.ORDER',
@@ -454,8 +436,6 @@ export const CODES: CodeInfo[] = [
     definition: "The syllabus's phrase types: coordinate, modifier + head, verb + object, subject + predicate, appositive; noun, verb and adjective phrases.",
     examples: ['*我喜欢中国的文化和吃 → 我喜欢中国的文化和中国菜'],
     item: 'none',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.FIXED',
@@ -465,8 +445,6 @@ export const CODES: CodeInfo[] = [
     definition: 'Fixed patterns, four-character frames, set phrases and discourse markers from the syllabus (除了……以外, 对……来说, 越来越, 换句话说 …) used wrongly or incompletely.',
     examples: ['*除了他，我们也都去了以外 → 除了他以外，我们也都去了'],
     item: 'none',
-    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
-    ai: false,
   },
   {
     code: 'GRAM.OTHER',
