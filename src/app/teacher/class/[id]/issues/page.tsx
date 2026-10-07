@@ -4,21 +4,17 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ErrorType } from '@/types';
+import { Class } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
-
-interface ClassError {
-  error_type: ErrorType;
-  count: number;
-  patterns?: { name: string; count: number }[];
-  examples: { id: string; original: string; revision: string; explanation: string; pattern_name?: string }[];
-}
+import type { IssueGroup } from '@/lib/error-tracking';
 
 export default function ClassIssuesPage() {
   const { id } = useParams();
   const [cls, setCls] = useState<Class | null>(null);
-  const [errors, setErrors] = useState<ClassError[]>([]);
+  const [errors, setErrors] = useState<IssueGroup[]>([]);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
+  const [styleCount, setStyleCount] = useState(0);
+  const [includeStyle, setIncludeStyle] = useState(false);
   const [filter, setFilter] = useState<'today' | 'all'>('all');
   const [assignmentFilter, setAssignmentFilter] = useState('');
   const [assignments, setAssignments] = useState<string[]>([]);
@@ -56,7 +52,7 @@ export default function ClassIssuesPage() {
   useEffect(() => {
     loadIssues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, filter, assignmentFilter]);
+  }, [id, filter, assignmentFilter, includeStyle]);
 
   async function loadIssues() {
     setLoading(true);
@@ -67,12 +63,14 @@ export default function ClassIssuesPage() {
     if (assignmentFilter) {
       params.set('assignment', assignmentFilter);
     }
+    if (includeStyle) params.set('style', '1');
 
     const res = await fetch(`/api/teacher/issues?${params}`);
     const data = await res.json();
 
     setErrors(data.errorTypes || []);
     setTotalSubmissions(data.totalSubmissions || 0);
+    setStyleCount(data.styleCount || 0);
     setLoading(false);
   }
 
@@ -141,7 +139,14 @@ export default function ClassIssuesPage() {
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : (
-        <ClassIssues errors={errors} totalSubmissions={totalSubmissions} onRefresh={loadIssues} />
+        <ClassIssues
+          errors={errors}
+          totalSubmissions={totalSubmissions}
+          styleCount={styleCount}
+          includeStyle={includeStyle}
+          onToggleStyle={setIncludeStyle}
+          onRefresh={loadIssues}
+        />
       )}
     </div>
   );

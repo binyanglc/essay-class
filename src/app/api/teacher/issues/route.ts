@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get('projectId');
     const filter = searchParams.get('filter') || 'all';
     const assignmentName = searchParams.get('assignment') || undefined;
+    // Also count "not natural" style suggestions
+    const includeStyle = searchParams.get('style') === '1';
 
     if (!classId) {
       return NextResponse.json({ error: 'Missing classId' }, { status: 400 });
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
       since,
       projectId: projectId || undefined,
       assignmentName: filter === 'assignment' ? assignmentName : undefined,
+      includeStyle,
     });
 
     return NextResponse.json(summary);

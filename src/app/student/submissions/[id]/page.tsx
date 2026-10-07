@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Submission, Feedback, ErrorTag } from '@/types';
 import FeedbackView from '@/components/FeedbackView';
+import { isActive } from '@/lib/error-taxonomy';
 import CompositionReview from '@/components/CompositionReview';
 
 export default function SubmissionDetailPage() {
@@ -37,7 +38,7 @@ export default function SubmissionDetailPage() {
           .from('error_tags')
           .select('*')
           .eq('submission_id', sub.id);
-        setErrorTags(tags || []);
+        setErrorTags(((tags || []) as ErrorTag[]).filter(isActive));
       }
       setLoading(false);
     }

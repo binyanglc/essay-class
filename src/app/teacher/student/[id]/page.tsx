@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Profile, Submission, Feedback, ErrorTag, ErrorFrequency, ErrorType } from '@/types';
+import { Profile, Submission, Feedback, ErrorTag, ErrorFrequency } from '@/types';
+import { isActive } from '@/lib/error-taxonomy';
 import { getStudentErrorHistory } from '@/lib/error-tracking';
 import ErrorSummary from '@/components/ErrorSummary';
 import FeedbackView from '@/components/FeedbackView';
@@ -73,7 +74,7 @@ export default function TeacherStudentDetailPage() {
       .from('error_tags')
       .select('*')
       .eq('submission_id', sub.id);
-    setSelectedTags(tags || []);
+    setSelectedTags(((tags || []) as ErrorTag[]).filter(isActive));
   };
 
   if (loading) return <p className="text-gray-500">Loading...</p>;

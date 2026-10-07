@@ -1,43 +1,58 @@
 'use client';
 
 import { useState } from 'react';
-import { ERROR_TYPE_LABELS, ErrorType } from '@/types';
-
-interface ExampleItem {
-  id: string;
-  original: string;
-  revision: string;
-  explanation: string;
-  /** The error label, e.g. "了 usage". */
-  pattern_name?: string;
-}
-
-interface ClassError {
-  error_type: ErrorType;
-  count: number;
-  /** Most common labels of this kind. */
-  patterns?: { name: string; count: number }[];
-  examples: ExampleItem[];
-}
+import { ERROR_TYPE_LABELS } from '@/types';
+import type { DeleteReason } from '@/lib/error-taxonomy';
+import type { FamilySummary, IssueGroup, LabelExample } from '@/lib/error-tracking';
+import { RemoveReasonPrompt } from './LabelControls';
 
 interface Props {
-  errors: ClassError[];
+  errors: IssueGroup[];
   totalSubmissions: number;
+  /** "Not natural" suggestions left out of the counts. */
+  styleCount?: number;
+  includeStyle?: boolean;
+  onToggleStyle?: (include: boolean) => void;
   onRefresh?: () => void;
 }
 
-export default function ClassIssues({ errors, totalSubmissions, onRefresh }: Props) {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * Common Issues: the class's labels by kind → family (e.g. 了) → exact item
+ * (e.g. "No 了 after 没"), with how many students each one affects.
+ */
+export default function ClassIssues({
+  errors,
+  totalSubmissions,
+  styleCount = 0,
+  includeStyle = false,
+  onToggleStyle,
+  onRefresh,
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({ original: '', revision: '', explanation: '' });
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState<LabelExample | null>(null);
+
+  const styleToggle = onToggleStyle && (includeStyle || styleCount > 0) && (
+    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+      <input type="checkbox" checked={includeStyle} onChange={(e) => onToggleStyle(e.target.checked)} />
+      Include &ldquo;not natural&rdquo; suggestions
+      {!includeStyle && styleCount > 0 && <span className="text-gray-400">({styleCount} not counted)</span>}
+    </label>
+  );
 
   if (errors.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">No submission data yet</p>
+      <div className="space-y-3 py-8 text-center">
+        <p className="text-gray-500">No submission data yet</p>
+        {styleToggle}
+      </div>
     );
   }
 
-  const handleStartEdit = (ex: ExampleItem) => {
+  const handleStartEdit = (ex: LabelExample) => {
     setEditingId(ex.id);
     setEditDraft({ original: ex.original, revision: ex.revision, explanation: ex.explanation });
   };
@@ -61,140 +76,159 @@ export default function ClassIssues({ errors, totalSubmissions, onRefresh }: Pro
     }
   };
 
-  const handleDelete = async (tagId: string) => {
-    if (!confirm('Delete this error example?')) return;
-    const res = await fetch(`/api/error-tags/${tagId}`, { method: 'DELETE' });
+  const handleDelete = async (tagId: string, reason: DeleteReason | null) => {
+    setRemoving(null);
+    const res = await fetch(`/api/error-tags/${tagId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
     if (res.ok) onRefresh?.();
   };
 
+  const example = (ex: LabelExample) => (
+    <div key={ex.id} className="rounded-lg bg-gray-50 p-4">
+      {editingId === ex.id ? (
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs text-gray-500">Original</label>
+            <input
+              type="text"
+              value={editDraft.original}
+              onChange={(e) => setEditDraft((d) => ({ ...d, original: e.target.value }))}
+              className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Revision</label>
+            <input
+              type="text"
+              value={editDraft.revision}
+              onChange={(e) => setEditDraft((d) => ({ ...d, revision: e.target.value }))}
+              className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Explanation</label>
+            <textarea
+              value={editDraft.explanation}
+              onChange={(e) => setEditDraft((d) => ({ ...d, explanation: e.target.value }))}
+              rows={2}
+              className="mt-0.5 w-full resize-y rounded border border-gray-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving}
+              className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-xs text-gray-500">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs font-medium text-blue-600">
+              {ex.label}
+              {ex.unchecked && (
+                <span
+                  title="AI suggestion — not yet checked by the teacher"
+                  className="rounded bg-white px-1 text-[9px] font-semibold uppercase tracking-wide text-gray-500 ring-1 ring-inset ring-gray-200"
+                >
+                  AI
+                </span>
+              )}
+            </div>
+            {ex.original && <div className="text-sm text-red-600 line-through">{ex.original}</div>}
+            {ex.revision && <div className="mt-1 text-sm text-green-700">&rarr; {ex.revision}</div>}
+            {ex.explanation && <div className="mt-2 text-xs text-gray-500">{ex.explanation}</div>}
+          </div>
+          <div className="ml-3 flex flex-shrink-0 items-center gap-2">
+            <button onClick={() => handleStartEdit(ex)} className="text-xs text-gray-400 hover:text-blue-600" title="Edit">
+              ✏️
+            </button>
+            <button onClick={() => setRemoving(ex)} className="text-xs text-gray-400 hover:text-red-600" title="Remove this label">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      {removing?.id === ex.id && (
+        <div className="mt-2">
+          <RemoveReasonPrompt
+            name={ex.label}
+            onChoose={(reason) => handleDelete(ex.id, reason)}
+            onCancel={() => setRemoving(null)}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const family = (f: FamilySummary) => (
+    <div key={f.key} className="rounded-lg border border-gray-100 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 className="font-medium text-gray-900">
+          {f.name}
+          {f.zh && f.zh !== f.name && <span className="ml-1.5 text-sm font-normal text-gray-500">{f.zh}</span>}
+        </h4>
+        <span className="text-xs text-gray-500">
+          {plural(f.count, 'time')} &middot; {plural(f.students, 'student')}
+          {f.unchecked > 0 && <span className="text-gray-400"> &middot; {f.unchecked} not checked</span>}
+        </span>
+      </div>
+      {f.items.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {f.items.slice(0, 8).map((it) => (
+            <span
+              key={it.key}
+              title={`${plural(it.count, 'time')}, ${plural(it.students, 'student')}`}
+              className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
+            >
+              {it.name}
+              <span className="text-gray-400">
+                &times;{it.count}
+                {it.students > 1 ? ` · ${it.students} students` : ''}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {f.examples.length > 0 && (
+        <details className="mt-3 group">
+          <summary className="cursor-pointer text-xs text-blue-600 hover:underline">
+            Examples ({f.examples.length})
+          </summary>
+          <div className="mt-2 space-y-3">{f.examples.map(example)}</div>
+        </details>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-8">
-      <p className="text-sm text-gray-500">
-        Based on {totalSubmissions} recent submissions
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-500">Based on {plural(totalSubmissions, 'submission')}</p>
+        {styleToggle}
+      </div>
 
-      {errors.slice(0, 5).map((e, idx) => (
-        <div
-          key={e.error_type}
-          className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6"
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-2xl font-bold text-blue-600">
-              #{idx + 1}
-            </span>
+      {errors.map((e, idx) => (
+        <div key={e.error_type} className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="text-2xl font-bold text-blue-600">#{idx + 1}</span>
             <div>
-              <h3 className="font-semibold text-lg">
-                {ERROR_TYPE_LABELS[e.error_type]}
-              </h3>
+              <h3 className="text-lg font-semibold">{ERROR_TYPE_LABELS[e.error_type] ?? e.error_type}</h3>
               <p className="text-sm text-gray-500">
-                {e.count} occurrence{e.count === 1 ? '' : 's'}
+                {plural(e.count, 'occurrence')} &middot; {plural(e.students, 'student')}
               </p>
             </div>
           </div>
-
-          {e.patterns && e.patterns.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {e.patterns.slice(0, 8).map((p) => (
-                <span
-                  key={p.name}
-                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
-                >
-                  {p.name}
-                  <span className="text-gray-400">&times;{p.count}</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {e.examples.map((ex) => (
-              <div key={ex.id} className="bg-gray-50 rounded-lg p-4">
-                {editingId === ex.id ? (
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-xs text-gray-500">Original</label>
-                      <input
-                        type="text"
-                        value={editDraft.original}
-                        onChange={(e) => setEditDraft((d) => ({ ...d, original: e.target.value }))}
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Revision</label>
-                      <input
-                        type="text"
-                        value={editDraft.revision}
-                        onChange={(e) => setEditDraft((d) => ({ ...d, revision: e.target.value }))}
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Explanation</label>
-                      <textarea
-                        value={editDraft.explanation}
-                        onChange={(e) => setEditDraft((d) => ({ ...d, explanation: e.target.value }))}
-                        rows={2}
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mt-0.5 focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleSaveEdit}
-                        disabled={saving}
-                        className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-xs text-gray-500 px-3 py-1.5"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        {ex.pattern_name && (
-                          <div className="mb-1 text-xs font-medium text-blue-600">{ex.pattern_name}</div>
-                        )}
-                        <div className="text-sm text-red-600 line-through">
-                          {ex.original}
-                        </div>
-                        <div className="text-sm text-green-700 mt-1">
-                          &rarr; {ex.revision}
-                        </div>
-                        {ex.explanation && (
-                          <div className="text-xs text-gray-500 mt-2">
-                            {ex.explanation}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                        <button
-                          onClick={() => handleStartEdit(ex)}
-                          className="text-xs text-gray-400 hover:text-blue-600"
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(ex.id)}
-                          className="text-xs text-gray-400 hover:text-red-600"
-                          title="Delete"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <div className="space-y-3">{e.families.map(family)}</div>
         </div>
       ))}
     </div>

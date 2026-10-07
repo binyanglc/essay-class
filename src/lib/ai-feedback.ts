@@ -52,18 +52,7 @@ Return a JSON object with this EXACT structure:
   "vocabulary_comment": "1-2 sentence comment on vocabulary, specific to this composition. If errors: summarize. If no errors: praise with specific words from the text.",
   "grammar_comment": "1-2 sentence comment on grammar, specific to this composition. If errors: summarize. If no errors: praise with specific patterns from the text.",
   "content_feedback": "Assess IDEAS and CONTENT: Is the main argument clear? Enough supporting details? Reasoning logical? Provide specific suggestions.",
-  "structure_feedback": "Assess ORGANIZATION and STRUCTURE: Clear beginning/middle/end? Transitions used? Also note any PUNCTUATION issues.",
-  "error_tags": [
-    {
-      "error_type": "characters|vocabulary|grammar",
-      "pattern_name": "Short specific name, e.g. '了 usage', 'word order in comparison'",
-      "original_text": "Chinese text with error, copied exactly from the composition",
-      "suggested_revision": "Corrected Chinese",
-      "explanation": "English explanation",
-      "improvement_tip": "Concrete rule or grammar pattern the student can study",
-      "sentence_index": 0
-    }
-  ]
+  "structure_feedback": "Assess ORGANIZATION and STRUCTURE: Clear beginning/middle/end? Transitions used? Also note any PUNCTUATION issues."
 }
 
 SENTENCE REVISION RULES (VERY IMPORTANT — the revisions are shown inside the full composition, like track changes):
@@ -71,6 +60,7 @@ SENTENCE REVISION RULES (VERY IMPORTANT — the revisions are shown inside the f
 2. "original" must be copied character-for-character from the composition — same characters, same punctuation — so it can be found in the text. One whole sentence (or clause) per item; a sentence may continue across a line break.
 3. Make the smallest change that fixes each problem. Keep the student's words, sentence structure and ideas. Do not rewrite sentences in your own style and do not replace correct words with fancier ones.
 4. Keep revisions at the student's level — no vocabulary far beyond what they used. If you must use a new word or pattern, explain it.
+5. Keep the student's script: if they write traditional characters, correct in traditional characters. Never convert between traditional and simplified.
 
 EXPLANATION RULES for sentence_revisions:
 1. If a sentence has MULTIPLE errors, explain ALL of them. Number each error clearly:
@@ -79,16 +69,9 @@ EXPLANATION RULES for sentence_revisions:
    "The revised sentence uses '不仅...而且...' (not only...but also...) — this is a common pattern to connect two related advantages. 不仅 introduces the first point, 而且 introduces the second."
 3. Every change between the original and revised sentence must be explained. Do not leave any correction unexplained.
 
-CLASSIFICATION RULES for error_tags:
-- "characters": Wrong Chinese character (e.g. 在 instead of 再). If none, omit.
-- "vocabulary": Wrong word choice, wrong measure word, incorrect collocations
-- "grammar": Word order, particles (了/过/着/的/得/地), prepositions, sentence structure
-- Only real errors — never tag a style suggestion.
-
 IMPORTANT:
 - sentence_revisions may be an empty array if nothing needs correcting at this level
 - content_feedback and structure_feedback are REQUIRED
-- error_tags: ONLY types characters, vocabulary, grammar
 - All explanations in English; Chinese only in original/revised text
 - Return valid JSON only`;
 

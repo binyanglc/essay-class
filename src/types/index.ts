@@ -6,7 +6,10 @@ export type ErrorType =
   | 'grammar'
   | 'content'
   | 'structure'
-  | 'punctuation';
+  | 'punctuation'
+  | 'discourse'
+  | 'register'
+  | 'expression';
 
 export const ERROR_TAG_TYPES = ['characters', 'vocabulary', 'grammar'] as const;
 
@@ -17,6 +20,9 @@ export const ERROR_TYPE_LABELS: Record<string, string> = {
   content: 'Content & Ideas',
   structure: 'Organization & Structure',
   punctuation: 'Punctuation',
+  discourse: 'Linking & Flow',
+  register: 'Register & Tone',
+  expression: 'Natural Expression',
 };
 
 export const FEEDBACK_SECTION_ORDER: ErrorType[] = [
@@ -151,6 +157,31 @@ export interface ErrorTag {
   improvement_tip: string;
   sentence_index: number | null;
   created_at: string;
+  // Added in migration v12 (taxonomy v1). Older labels have none of these.
+  /** Label code from lib/error-taxonomy, e.g. "GRAM.LE". */
+  code?: string | null;
+  /** Misuse rule, e.g. "R.LE.NEG". */
+  rule?: string | null;
+  /** The right word(s) ("认识") and what the student wrote ("知道"). */
+  item_target?: string | null;
+  item_learner?: string | null;
+  /** Grammar point in the HSK syllabus (2025) — filled in once the syllabus is imported. */
+  grammar_point?: string | null;
+  nature?: 'error' | 'infelicity' | 'variant' | null;
+  severity?: 'global' | 'local' | null;
+  operation?: 'missing' | 'unnecessary' | 'replace' | 'order' | null;
+  source?: 'ai' | 'teacher' | null;
+  status?: 'suggested' | 'confirmed' | 'modified' | 'added' | 'deleted' | null;
+  delete_reason?: 'ai_wrong' | 'not_error' | 'not_now' | null;
+  deleted_at?: string | null;
+  /** The teacher's own wording for the label. */
+  custom_label?: string | null;
+  /** Id of the sentence revision (correction) the label belongs to. */
+  revision_id?: string | null;
+  /** The AI's label as first given (kept when the teacher changes it). */
+  ai_original?: Record<string, unknown> | null;
+  taxonomy_version?: string | null;
+  model?: string | null;
 }
 
 export interface ErrorPattern {
@@ -190,13 +221,4 @@ export interface AIFeedbackResponse {
   content_feedback: string;
   structure_feedback: string;
   sentence_revisions: SentenceRevision[];
-  error_tags: {
-    error_type: string;
-    pattern_name: string;
-    original_text: string;
-    suggested_revision: string;
-    explanation: string;
-    improvement_tip: string;
-    sentence_index: number | null;
-  }[];
 }

@@ -3,15 +3,15 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { DiffOp } from '@/lib/track-changes';
-import type { ErrorType } from '@/types';
 import type { Revision } from '@/lib/revisions';
+import type { DeleteReason } from '@/lib/error-taxonomy';
+import { isUnconfirmedAi, tagLabel } from '@/lib/error-taxonomy';
+import type { LabelFields } from '@/lib/tag-edits';
 import { DiffOps, NumberBadge } from './TrackChangesView';
+import { LabelChip, LabelEditor, RemoveReasonPrompt, changesFromOps } from './LabelControls';
+import type { LabelSuggestion, TagChip } from './LabelControls';
 
-export interface TagChip {
-  id?: string;
-  error_type: string;
-  pattern_name: string;
-}
+export type { LabelSuggestion, TagChip } from './LabelControls';
 
 /** A correction being edited by the teacher (previewed live in the essay). */
 export interface Draft {
@@ -26,143 +26,6 @@ export interface Draft {
   /** Values when editing started — unchanged drafts are not saved. */
   baseRevised?: string;
   baseExplanation?: string;
-}
-
-const TYPE_STYLE: Record<string, { label: string; cls: string }> = {
-  characters: { label: 'Characters', cls: 'bg-rose-50 text-rose-700 ring-rose-200' },
-  vocabulary: { label: 'Vocabulary', cls: 'bg-amber-50 text-amber-800 ring-amber-200' },
-  grammar: { label: 'Grammar', cls: 'bg-sky-50 text-sky-800 ring-sky-200' },
-};
-
-export function TypeChip({
-  tag,
-  count,
-  onRemove,
-  onEdit,
-}: {
-  tag: TagChip;
-  count?: number;
-  onRemove?: () => void;
-  onEdit?: () => void;
-}) {
-  const t = TYPE_STYLE[tag.error_type] ?? { label: tag.error_type, cls: 'bg-gray-50 text-gray-700 ring-gray-200' };
-  const text = count !== undefined ? `${t.label} ${count}` : `${t.label} · ${tag.pattern_name}`;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${t.cls}`}>
-      {onEdit ? (
-        <button type="button" onClick={onEdit} title="Change this label" className="hover:underline">
-          {text}
-        </button>
-      ) : (
-        text
-      )}
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove label ${tag.pattern_name}`}
-          title="Remove this label"
-          className="-mr-1 px-0.5 text-sm leading-none opacity-60 hover:text-red-600 hover:opacity-100"
-        >
-          &times;
-        </button>
-      )}
-    </span>
-  );
-}
-
-export interface LabelSuggestion {
-  error_type: string;
-  pattern_name: string;
-}
-
-const LABEL_TYPES: ErrorType[] = ['characters', 'vocabulary', 'grammar'];
-
-// Common labels, suggested after the names this class already uses
-const DEFAULT_LABELS: LabelSuggestion[] = [
-  { error_type: 'characters', pattern_name: 'Wrong character' },
-  { error_type: 'characters', pattern_name: 'Similar-sounding character' },
-  { error_type: 'characters', pattern_name: 'Similar-looking character' },
-  { error_type: 'vocabulary', pattern_name: 'Word choice' },
-  { error_type: 'vocabulary', pattern_name: 'Collocation' },
-  { error_type: 'vocabulary', pattern_name: 'Measure word' },
-  { error_type: 'grammar', pattern_name: '了 usage' },
-  { error_type: 'grammar', pattern_name: 'Word order' },
-  { error_type: 'grammar', pattern_name: '的 / 得 / 地' },
-  { error_type: 'grammar', pattern_name: 'Sentence structure' },
-];
-
-/** Type + name of an error label, with the names already used in this class suggested first. */
-function LabelEditor({
-  id,
-  initial,
-  suggestions,
-  onSave,
-  onCancel,
-}: {
-  id: string;
-  initial?: { error_type: ErrorType; pattern_name: string };
-  suggestions: LabelSuggestion[];
-  onSave: (label: { error_type: ErrorType; pattern_name: string }) => void;
-  onCancel: () => void;
-}) {
-  const [type, setType] = useState<ErrorType>(initial?.error_type ?? 'grammar');
-  const [name, setName] = useState(initial?.pattern_name ?? '');
-  const names = Array.from(
-    new Set([...suggestions, ...DEFAULT_LABELS].filter((s) => s.error_type === type).map((s) => s.pattern_name))
-  );
-  const save = () => name.trim() && onSave({ error_type: type, pattern_name: name.trim() });
-  return (
-    <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/60 p-2">
-      <div className="flex gap-1.5">
-        <select
-          id={`${id}-type`}
-          aria-label="Error type"
-          value={type}
-          onChange={(e) => setType(e.target.value as ErrorType)}
-          className="shrink-0 rounded border border-gray-300 bg-white px-1.5 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {LABEL_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_STYLE[t].label}
-            </option>
-          ))}
-        </select>
-        <input
-          id={`${id}-name`}
-          aria-label="Label name"
-          list={`${id}-names`}
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') save();
-            if (e.key === 'Escape') onCancel();
-          }}
-          placeholder="e.g. 了 usage"
-          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <datalist id={`${id}-names`}>
-          {names.map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={save}
-          disabled={!name.trim()}
-          className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-        >
-          {initial ? 'Change' : 'Add'}
-        </button>
-        <button type="button" onClick={onCancel} className="px-1 text-xs text-gray-500 hover:text-gray-800">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
 }
 
 interface Props {
@@ -188,12 +51,14 @@ interface Props {
   onCancel: () => void;
   onDelete: () => void;
   onAttach: () => void;
-  /** Teacher only: remove an error label from this correction. */
-  onRemoveTag?: (tagId: string) => void;
+  /** Teacher only: remove an error label from this correction (reason optional). */
+  onRemoveTag?: (tagId: string, reason: DeleteReason | null) => void;
   /** Teacher only: label this correction. */
-  onAddTag?: (label: { error_type: ErrorType; pattern_name: string }) => void;
-  /** Teacher only: change a label's type or name. */
-  onUpdateTag?: (tagId: string, label: { error_type: ErrorType; pattern_name: string }) => void;
+  onAddTag?: (label: LabelFields) => void;
+  /** Teacher only: change a label. */
+  onUpdateTag?: (tagId: string, label: LabelFields) => void;
+  /** Teacher only: keep an AI label as it is. */
+  onConfirmTag?: (tagId: string) => void;
   labelSuggestions?: LabelSuggestion[];
 }
 
@@ -204,8 +69,18 @@ export default function RevisionInspector(props: Props) {
   // Which label is being changed ("new" = adding one); closes if that label is removed
   const [labelChoice, setLabelEditing] = useState<string | null>(null);
   const labelEditing = labelChoice === 'new' || tags.some((t) => t.id === labelChoice) ? labelChoice : null;
+  // Which label is being removed (asks for an optional reason)
+  const [removeChoice, setRemoving] = useState<string | null>(null);
+  const removing = tags.find((t) => t.id === removeChoice) ?? null;
   const canLabel = canEdit && !editing && !!props.onAddTag;
   const label = 'text-[11px] font-semibold uppercase tracking-wide text-gray-400';
+  const changes = changesFromOps(ops);
+  const sameLabel = (a: LabelFields, b: TagChip) =>
+    a.code === b.code &&
+    (a.rule ?? null) === (b.rule ?? null) &&
+    (a.item_target ?? null) === (b.item_target ?? null) &&
+    (a.item_learner ?? null) === (b.item_learner ?? null);
+  const unchecked = tags.some(isUnconfirmedAi);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
@@ -238,11 +113,14 @@ export default function RevisionInspector(props: Props) {
               </span>
             )}
             {tags.map((t) => (
-              <TypeChip
-                key={t.id ?? `${t.error_type}-${t.pattern_name}`}
+              <LabelChip
+                key={t.id ?? `${t.code ?? t.error_type}-${t.pattern_name}`}
                 tag={t}
-                onRemove={canEdit && props.onRemoveTag && t.id ? () => props.onRemoveTag?.(t.id!) : undefined}
+                onRemove={canEdit && props.onRemoveTag && t.id ? () => setRemoving(t.id!) : undefined}
                 onEdit={canLabel && props.onUpdateTag && t.id ? () => setLabelEditing(t.id!) : undefined}
+                onConfirm={
+                  canLabel && props.onConfirmTag && t.id && isUnconfirmedAi(t) ? () => props.onConfirmTag?.(t.id!) : undefined
+                }
               />
             ))}
             {canLabel && labelEditing === null && (
@@ -256,6 +134,21 @@ export default function RevisionInspector(props: Props) {
             )}
           </div>
         )}
+        {!canEdit && unchecked && (
+          <p className="text-[11px] leading-snug text-gray-400">
+            Labels marked AI are suggestions — your teacher hasn&apos;t checked them yet.
+          </p>
+        )}
+        {canEdit && removing && props.onRemoveTag && (
+          <RemoveReasonPrompt
+            name={tagLabel(removing)}
+            onChoose={(reason) => {
+              props.onRemoveTag?.(removing.id!, reason);
+              setRemoving(null);
+            }}
+            onCancel={() => setRemoving(null)}
+          />
+        )}
         {canLabel && labelEditing !== null && (
           <LabelEditor
             key={labelEditing}
@@ -265,21 +158,29 @@ export default function RevisionInspector(props: Props) {
                 ? undefined
                 : (() => {
                     const t = tags.find((x) => x.id === labelEditing);
-                    return t ? { error_type: t.error_type as ErrorType, pattern_name: t.pattern_name } : undefined;
+                    return t
+                      ? {
+                          code: t.code ?? '',
+                          rule: t.rule ?? null,
+                          item_target: t.item_target ?? null,
+                          item_learner: t.item_learner ?? null,
+                          nature: (t.nature as LabelFields['nature']) ?? undefined,
+                          custom_label: t.custom_label ?? null,
+                        }
+                      : undefined;
                   })()
             }
+            changes={changes}
             suggestions={props.labelSuggestions ?? []}
-            onSave={(label) => {
+            onSave={(fields) => {
               // This correction already has that label: keep one
-              const duplicate = tags.some(
-                (t) => t.id !== labelEditing && t.error_type === label.error_type && t.pattern_name === label.pattern_name
-              );
+              const duplicate = tags.some((t) => t.id !== labelEditing && sameLabel(fields, t));
               if (labelEditing === 'new') {
-                if (!duplicate) props.onAddTag?.(label);
+                if (!duplicate) props.onAddTag?.(fields);
               } else if (duplicate) {
-                props.onRemoveTag?.(labelEditing);
+                props.onRemoveTag?.(labelEditing, null);
               } else {
-                props.onUpdateTag?.(labelEditing, label);
+                props.onUpdateTag?.(labelEditing, fields);
               }
               setLabelEditing(null);
             }}

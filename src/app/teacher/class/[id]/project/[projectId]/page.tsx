@@ -20,25 +20,23 @@ import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
 import CompositionReview from '@/components/CompositionReview';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
-import ErrorLabels from '@/components/ErrorLabels';
+import ErrorLabels, { ExtraLabelSections } from '@/components/ErrorLabels';
 import type { LabelSuggestion } from '@/components/RevisionInspector';
 import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
 import {
   addTag as addTagEdit,
   applyTagEdits,
+  changesLabel,
+  confirmTags,
   emptyTagEdits,
   isTagEditsEmpty,
   removeTag as removeTagEdit,
   updateTag as updateTagEdit,
 } from '@/lib/tag-edits';
 import type { LabelFields, NewTag, TagEdits } from '@/lib/tag-edits';
-
-interface ClassError {
-  error_type: ErrorType;
-  count: number;
-  patterns?: { name: string; count: number }[];
-  examples: { id: string; original: string; revision: string; explanation: string; pattern_name?: string }[];
-}
+import { isActive, isUnconfirmedAi } from '@/lib/error-taxonomy';
+import type { DeleteReason } from '@/lib/error-taxonomy';
+import type { IssueGroup } from '@/lib/error-tracking';
 
 export default function ProjectDetailPage() {
   const { id: classId, projectId } = useParams();
@@ -54,8 +52,10 @@ export default function ProjectDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [labelSuggestions, setLabelSuggestions] = useState<LabelSuggestion[]>([]);
-  const [issues, setIssues] = useState<ClassError[]>([]);
+  const [issues, setIssues] = useState<IssueGroup[]>([]);
   const [issueCount, setIssueCount] = useState(0);
+  const [issueStyleCount, setIssueStyleCount] = useState(0);
+  const [includeStyle, setIncludeStyle] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [projNameDraft, setProjNameDraft] = useState('');
@@ -79,6 +79,11 @@ export default function ProjectDetailPage() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  useEffect(() => {
+    if (!loading) loadIssues();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeStyle]);
 
   async function loadData() {
     const { data: proj } = await supabase
@@ -122,38 +127,42 @@ export default function ProjectDetailPage() {
   /** Common Issues is worked out from the saved labels each time it loads — nothing to regenerate. */
   async function loadIssues() {
     try {
-      const res = await fetch(`/api/teacher/issues?classId=${classId}&projectId=${projectId}`);
+      const res = await fetch(
+        `/api/teacher/issues?classId=${classId}&projectId=${projectId}${includeStyle ? '&style=1' : ''}`
+      );
       if (!res.ok) return;
       const issueData = await res.json();
       setIssues(issueData.errorTypes || []);
       setIssueCount(issueData.totalSubmissions || 0);
+      setIssueStyleCount(issueData.styleCount || 0);
     } catch {
       // keep what is shown
     }
   }
 
-  /** Label names already used in this class, most used first, so names stay consistent. */
+  /** The teacher's own label names already used in this class, most used first, so names stay consistent. */
   async function loadLabelSuggestions() {
     const { data } = await supabase
       .from('error_tags')
-      .select('error_type, pattern_name, submissions!inner(class_id)')
+      .select('code, custom_label, status, submissions!inner(class_id)')
       .eq('submissions.class_id', classId)
+      .not('custom_label', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1000);
     if (!data) return;
     const counts = new Map<string, LabelSuggestion & { count: number }>();
-    for (const t of data as unknown as { error_type: string; pattern_name: string | null }[]) {
-      const name = t.pattern_name?.trim();
-      if (!name) continue;
-      const key = `${t.error_type}|${name}`;
+    for (const t of data as unknown as { code: string | null; custom_label: string | null; status: string | null }[]) {
+      const name = t.custom_label?.trim();
+      if (!name || !t.code || !isActive(t)) continue;
+      const key = `${t.code}|${name}`;
       const hit = counts.get(key);
       if (hit) hit.count++;
-      else counts.set(key, { error_type: t.error_type, pattern_name: name, count: 1 });
+      else counts.set(key, { code: t.code, custom_label: name, count: 1 });
     }
     setLabelSuggestions(
       Array.from(counts.values())
         .sort((a, b) => b.count - a.count)
-        .map(({ error_type, pattern_name }) => ({ error_type, pattern_name }))
+        .map(({ code, custom_label }) => ({ code, custom_label }))
     );
   }
 
@@ -187,7 +196,7 @@ export default function ProjectDetailPage() {
       .select('*')
       .eq('submission_id', sub.id);
     if (latestSelection.current !== sub.id) return;
-    setSelectedTags(tags || []);
+    setSelectedTags(((tags || []) as ErrorTag[]).filter(isActive));
 
     if (fb) {
       loadCommentsForFeedback(fb.id);
@@ -233,25 +242,45 @@ export default function ProjectDetailPage() {
     setEditingRevisions(next);
   };
 
+  const sameLabel = (t: ErrorTag, l: LabelFields) =>
+    (t.code ?? null) === l.code &&
+    (t.rule ?? null) === l.rule &&
+    (t.item_target ?? null) === l.item_target &&
+    (t.item_learner ?? null) === l.item_learner;
+
   const handleAddTag = (tag: Omit<NewTag, 'id'>) => {
     // Already labelled like this: nothing to add
-    const same = (t: { error_type: string; pattern_name: string; original_text: string }) =>
-      t.error_type === tag.error_type && t.pattern_name === tag.pattern_name && t.original_text === tag.original_text;
-    if (visibleTags.some(same)) return;
+    if (visibleTags.some((t) => sameLabel(t, tag) && (t.revision_id ?? t.original_text) === (tag.revision_id ?? tag.original_text))) {
+      return;
+    }
     editTags((e) => addTagEdit(e, tag));
   };
 
   const handleUpdateTag = (tagId: string, label: LabelFields) => {
     const tag = visibleTags.find((t) => t.id === tagId);
-    if (tag && tag.error_type === label.error_type && tag.pattern_name === label.pattern_name) return;
+    if (
+      tag &&
+      sameLabel(tag, label) &&
+      (tag.nature ?? 'error') === label.nature &&
+      (tag.custom_label ?? null) === label.custom_label
+    ) {
+      return;
+    }
     editTags((e) => updateTagEdit(e, tagId, label));
   };
 
-  const handleRemoveTag = (tagId: string) => editTags((e) => removeTagEdit(e, tagId));
+  const handleRemoveTag = (tagId: string, reason: DeleteReason | null = null) =>
+    editTags((e) => removeTagEdit(e, tagId, reason));
+
+  const handleConfirmTag = (tagId: string) => editTags((e) => confirmTags(e, [tagId]));
+
+  /** Keeps every AI label the teacher hasn't changed or removed. */
+  const handleConfirmAllTags = () =>
+    editTags((e) => confirmTags(e, visibleTags.filter(isUnconfirmedAi).map((t) => t.id)));
 
   const reloadSelectedTags = async (subId: string) => {
     const { data: tags } = await supabase.from('error_tags').select('*').eq('submission_id', subId);
-    if (latestSelection.current === subId) setSelectedTags(tags || []);
+    if (latestSelection.current === subId) setSelectedTags(((tags || []) as ErrorTag[]).filter(isActive));
   };
 
   /** Sends the label changes; returns the ones that failed so they can be tried again. */
@@ -272,11 +301,16 @@ export default function ProjectDetailPage() {
       ...labels.added.map(async (t) => {
         const ok = await send('/api/error-tags', 'POST', {
           submission_id: subId,
-          error_type: t.error_type,
-          pattern_name: t.pattern_name,
+          code: t.code,
+          rule: t.rule,
+          item_target: t.item_target,
+          item_learner: t.item_learner,
+          nature: t.nature,
+          custom_label: t.custom_label,
           original_text: t.original_text,
           suggested_revision: t.suggested_revision,
           explanation: t.explanation,
+          revision_id: t.revision_id,
         });
         if (!ok) failed.added.push(t);
       }),
@@ -284,15 +318,27 @@ export default function ProjectDetailPage() {
       ...labels.deleted
         .filter((id) => saved.has(id))
         .map(async (id) => {
-          if (!(await send(`/api/error-tags/${id}`, 'DELETE'))) failed.deleted.push(id);
+          const reason = labels.deleteReasons[id] ?? null;
+          if (!(await send(`/api/error-tags/${id}`, 'DELETE', { reason }))) {
+            failed.deleted.push(id);
+            if (reason) failed.deleteReasons[id] = reason;
+          }
         }),
       ...Object.entries(labels.updated)
         .filter(([id]) => saved.has(id) && !labels.deleted.includes(id))
         .map(async ([id, patch]) => {
-          // The AI's study tip was written for its own diagnosis: drop it when the teacher renames the label
-          const renamed = patch.pattern_name !== undefined && patch.pattern_name !== saved.get(id)?.pattern_name;
-          const ok = await send(`/api/error-tags/${id}`, 'PUT', renamed ? { ...patch, improvement_tip: '' } : patch);
-          if (!ok) failed.updated[id] = patch;
+          // A label the teacher also checked: one request (a changed label is "modified" anyway)
+          const confirm = labels.confirmed.includes(id) && !changesLabel(patch);
+          const ok = await send(`/api/error-tags/${id}`, 'PUT', confirm ? { ...patch, status: 'confirmed' } : patch);
+          if (!ok) {
+            failed.updated[id] = patch;
+            if (confirm) failed.confirmed.push(id);
+          }
+        }),
+      ...labels.confirmed
+        .filter((id) => saved.has(id) && !labels.deleted.includes(id) && !labels.updated[id])
+        .map(async (id) => {
+          if (!(await send(`/api/error-tags/${id}`, 'PUT', { status: 'confirmed' }))) failed.confirmed.push(id);
         }),
     ]);
     return failed;
@@ -519,7 +565,14 @@ export default function ProjectDetailPage() {
 
       {showIssues && (
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <ClassIssues errors={issues} totalSubmissions={issueCount} onRefresh={handleIssuesChanged} />
+          <ClassIssues
+            errors={issues}
+            totalSubmissions={issueCount}
+            styleCount={issueStyleCount}
+            includeStyle={includeStyle}
+            onToggleStyle={setIncludeStyle}
+            onRefresh={handleIssuesChanged}
+          />
         </section>
       )}
 
@@ -619,6 +672,8 @@ export default function ProjectDetailPage() {
                 onRemoveTag={selectedFeedback ? handleRemoveTag : undefined}
                 onAddTag={selectedFeedback ? handleAddTag : undefined}
                 onUpdateTag={selectedFeedback ? handleUpdateTag : undefined}
+                onConfirmTag={selectedFeedback ? handleConfirmTag : undefined}
+                onConfirmAllTags={selectedFeedback ? handleConfirmAllTags : undefined}
                 labelSuggestions={labelSuggestions}
                 className="mb-6"
               />
@@ -686,7 +741,7 @@ function EditableFeedback({
   compositionText: string;
   revisions: SentenceRevision[] | null;
   errorTags: ErrorTag[];
-  onRemoveTag: (tagId: string) => void;
+  onRemoveTag: (tagId: string, reason: DeleteReason | null) => void;
   editing: Record<string, string>;
   onEdit: (field: string, value: string) => void;
   comments: FeedbackComment[];
@@ -755,6 +810,9 @@ function EditableFeedback({
         <ErrorLabels tags={grammarErrors} links={links} onRemove={onRemoveTag} />
         <TeacherCommentThread feedbackId={feedback.id} section="grammar" comments={comments} onRefresh={onRefreshComments} />
       </section>
+
+      {/* Punctuation, linking, register, natural expression: only when there are labels */}
+      <ExtraLabelSections tags={errorTags} links={links} onRemove={onRemoveTag} />
 
       {/* Content & Ideas */}
       <div>

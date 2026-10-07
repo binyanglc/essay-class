@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Feedback, ErrorTag, ErrorType, FeedbackComment, Profile, SentenceRevision } from '@/types';
+import { Feedback, ErrorTag, ErrorType, ERROR_TYPE_LABELS, FeedbackComment, Profile, SentenceRevision } from '@/types';
 import { linkTagsToCorrections } from '@/lib/correction-links';
-import ErrorLabels from './ErrorLabels';
+import { isActive, isUnconfirmedAi, tagLabel } from '@/lib/error-taxonomy';
+import ErrorLabels, { EXTRA_LABEL_TYPES } from './ErrorLabels';
 
 interface Props {
   feedback: Feedback;
@@ -13,8 +14,11 @@ interface Props {
   revisions?: SentenceRevision[] | null;
 }
 
-export default function FeedbackView({ feedback, errorTags, compositionText, revisions }: Props) {
+export default function FeedbackView({ feedback, errorTags: allTags, compositionText, revisions }: Props) {
   const [comments, setComments] = useState<FeedbackComment[]>([]);
+  // Labels the teacher removed are not shown
+  const errorTags = allTags?.filter(isActive);
+  const unchecked = (errorTags ?? []).some(isUnconfirmedAi);
 
   const groupedErrors = new Map<ErrorType, ErrorTag[]>();
   if (errorTags) {
@@ -66,6 +70,12 @@ export default function FeedbackView({ feedback, errorTags, compositionText, rev
         <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
           Reviewed by teacher &middot;{' '}
           {new Date(feedback.teacher_edited_at).toLocaleDateString('en-US')}
+        </p>
+      )}
+      {unchecked && (
+        <p className="text-xs text-gray-500">
+          Labels marked <span className="rounded bg-white px-1 text-[9px] font-semibold uppercase tracking-wide ring-1 ring-inset ring-gray-200">AI</span>{' '}
+          are suggestions — your teacher hasn&apos;t checked them yet.
         </p>
       )}
 
@@ -132,6 +142,18 @@ export default function FeedbackView({ feedback, errorTags, compositionText, rev
           onRefresh={loadComments}
         />
       </section>
+
+      {/* Punctuation, linking, register, natural expression: only when there are labels */}
+      {EXTRA_LABEL_TYPES.map((type) => {
+        const tags = groupedErrors.get(type) || [];
+        if (tags.length === 0) return null;
+        return (
+          <section key={type}>
+            <h3 className="font-semibold text-gray-900 mb-2">{ERROR_TYPE_LABELS[type]}</h3>
+            {renderTags(tags)}
+          </section>
+        );
+      })}
 
       {/* Content & Ideas */}
       <section>
@@ -278,10 +300,11 @@ function SectionComment({ comment, hasErrors }: { comment?: string; hasErrors: b
 }
 
 function ErrorTagCard({ tag }: { tag: ErrorTag }) {
+  const name = tagLabel(tag);
   return (
     <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-      {tag.pattern_name && (
-        <span className="text-xs text-blue-600 font-medium">{tag.pattern_name}</span>
+      {name && (
+        <span className="text-xs text-blue-600 font-medium">{name}</span>
       )}
       <div className="text-sm mt-1">
         <span className="text-red-600 line-through">{tag.original_text}</span>

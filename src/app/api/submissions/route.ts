@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateFeedback } from '@/lib/ai-feedback';
+import { tagRevisions } from '@/lib/ai-tagging';
+import type { AiTagRow } from '@/lib/ai-tagging';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
 import { joinWrappedLines } from '@/lib/text-layout';
 import { isCorrectionLevel } from '@/types';
 import type { CorrectionLevel } from '@/types';
+
+// Feedback and labelling are two AI calls in a row
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -93,6 +98,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const revisions = anchorRevisions(finalText, feedbackData.sentence_revisions);
+
     const { data: feedback } = await supabase
       .from('feedback')
       .insert({
@@ -105,7 +112,7 @@ export async function POST(request: NextRequest) {
         grammar_comment: feedbackData.grammar_comment || '',
         content_feedback: feedbackData.content_feedback || '',
         structure_feedback: feedbackData.structure_feedback || '',
-        sentence_revisions: anchorRevisions(finalText, feedbackData.sentence_revisions),
+        sentence_revisions: revisions,
         repeated_error_summary: '',
         next_step_advice: '',
         correction_level: correctionLevel,
@@ -113,24 +120,23 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (feedbackData.error_tags && feedbackData.error_tags.length > 0) {
-      const validTypes = ['characters', 'vocabulary', 'grammar'];
-      const errorTagRows = feedbackData.error_tags
-        .filter((tag) => validTypes.includes(tag.error_type))
-        .map((tag) => ({
-          submission_id: submission.id,
-          student_id: user.id,
-          error_type: tag.error_type,
-          pattern_name: tag.pattern_name || tag.error_type,
-          original_text: tag.original_text || '',
-          suggested_revision: tag.suggested_revision || '',
-          explanation: tag.explanation || '',
-          improvement_tip: tag.improvement_tip || '',
-          sentence_index: tag.sentence_index ?? null,
-        }));
-
-      if (errorTagRows.length > 0) {
-        await supabase.from('error_tags').insert(errorTagRows);
+    // Error labels from the fixed list, one step after the corrections (lib/ai-tagging).
+    // If labelling fails the feedback is still saved; the teacher can add labels.
+    if (feedback && revisions.length > 0) {
+      let labels: AiTagRow[] = [];
+      try {
+        labels = await tagRevisions(
+          revisions.map((r) => ({ id: r.id!, original: r.original, revised: r.revised, explanation: r.explanation })),
+          correctionLevel
+        );
+      } catch (tagError) {
+        console.error('AI labelling error:', tagError);
+      }
+      if (labels.length > 0) {
+        const { error: tagInsertError } = await supabase
+          .from('error_tags')
+          .insert(labels.map((l) => ({ ...l, submission_id: submission.id, student_id: user.id })));
+        if (tagInsertError) console.error('Error label insert error:', tagInsertError);
       }
     }
 

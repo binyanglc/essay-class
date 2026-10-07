@@ -5,11 +5,15 @@ import { placeRevisions, rebaseRevision } from '@/lib/track-changes';
 import { linkTags, onFocusCorrection } from '@/lib/correction-links';
 import { commentKeyFor, newRevisionId, withRevisionIds } from '@/lib/revisions';
 import type { Revision } from '@/lib/revisions';
-import type { ErrorTag, ErrorType, FeedbackComment, SentenceRevision } from '@/types';
+import type { ErrorTag, FeedbackComment, SentenceRevision } from '@/types';
+import { isActive, isUnconfirmedAi } from '@/lib/error-taxonomy';
+import type { DeleteReason } from '@/lib/error-taxonomy';
+import type { LabelFields, NewTag } from '@/lib/tag-edits';
 import TrackChangesView, { DEL_CLASS, DiffOps, INS_CLASS, NumberBadge } from './TrackChangesView';
 import type { EssayMode } from './TrackChangesView';
-import RevisionInspector, { TypeChip } from './RevisionInspector';
+import RevisionInspector from './RevisionInspector';
 import type { Draft, LabelSuggestion, TagChip } from './RevisionInspector';
+import { LabelChip } from './LabelControls';
 import CompositionPhoto from './CompositionPhoto';
 import TeacherCommentThread from './TeacherCommentThread';
 import { CommentThread } from './FeedbackView';
@@ -40,19 +44,17 @@ interface Props {
   onRefreshComments?: () => void;
   /** Teacher editing: receives the whole updated list (ids included). Omit for read-only. */
   onChangeRevisions?: (next: SentenceRevision[]) => void;
-  /** Teacher editing: remove an error label (error_tags row). */
-  onRemoveTag?: (tagId: string) => void;
+  /** Teacher editing: remove an error label (error_tags row), with an optional reason. */
+  onRemoveTag?: (tagId: string, reason: DeleteReason | null) => void;
   /** Teacher editing: add an error label for a correction. */
-  onAddTag?: (tag: {
-    error_type: ErrorType;
-    pattern_name: string;
-    original_text: string;
-    suggested_revision: string;
-    explanation: string;
-  }) => void;
-  /** Teacher editing: change a label's type or name. */
-  onUpdateTag?: (tagId: string, label: { error_type: ErrorType; pattern_name: string }) => void;
-  /** Label names already used in this class, suggested when labelling. */
+  onAddTag?: (tag: Omit<NewTag, 'id'>) => void;
+  /** Teacher editing: change a label. */
+  onUpdateTag?: (tagId: string, label: LabelFields) => void;
+  /** Teacher editing: keep an AI label as it is. */
+  onConfirmTag?: (tagId: string) => void;
+  /** Teacher editing: keep all the AI labels the teacher hasn't changed. */
+  onConfirmAllTags?: () => void;
+  /** The teacher's own label names already used in this class. */
   labelSuggestions?: LabelSuggestion[];
   label?: string;
   className?: string;
@@ -68,7 +70,7 @@ export default function CompositionReview({
   imagePath,
   revisions,
   partial = false,
-  errorTags = [],
+  errorTags: allTags = [],
   role,
   feedbackId,
   comments: commentsProp,
@@ -77,6 +79,8 @@ export default function CompositionReview({
   onRemoveTag,
   onAddTag,
   onUpdateTag,
+  onConfirmTag,
+  onConfirmAllTags,
   labelSuggestions,
   label = 'Composition',
   className = '',
@@ -107,6 +111,8 @@ export default function CompositionReview({
   const comments = commentsProp ?? ownComments;
   const refreshComments = onRefreshComments ?? (() => setCommentsVersion((v) => v + 1));
 
+  // Labels the teacher removed are kept for the record but not shown
+  const errorTags = useMemo(() => allTags.filter(isActive), [allTags]);
   const revs = useMemo(() => (revisions ? withRevisionIds(revisions) : null), [revisions]);
   const canEdit = role === 'teacher' && !!onChangeRevisions && !!revs;
 
@@ -156,6 +162,7 @@ export default function CompositionReview({
     for (const t of errorTags) if (tagLinks.has(t.id)) counts[t.error_type] = (counts[t.error_type] ?? 0) + 1;
     return counts;
   }, [errorTags, tagLinks]);
+  const uncheckedCount = errorTags.filter(isUnconfirmedAi).length;
 
   // Which views are available, and which one is showing
   const modes: Mode[] = [...(revs ? (['track'] as Mode[]) : []), 'original', ...(revs ? (['revised'] as Mode[]) : []), ...(imagePath ? (['photo'] as Mode[]) : [])];
@@ -363,11 +370,13 @@ export default function CompositionReview({
                   ...lbl,
                   original_text: placedActive ? text.slice(placedActive.start, placedActive.end) : active.original,
                   suggested_revision: placedActive ? placedActive.revised : active.revised,
-                  explanation: active.explanation,
+                  explanation: '',
+                  revision_id: active.id,
                 })
             : undefined
         }
         onUpdateTag={canEdit ? onUpdateTag : undefined}
+        onConfirmTag={canEdit ? onConfirmTag : undefined}
         labelSuggestions={labelSuggestions}
       />
     );
@@ -396,10 +405,32 @@ export default function CompositionReview({
           {Object.keys(typeCounts).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {Object.entries(typeCounts).map(([type, count]) => (
-                <TypeChip key={type} tag={{ error_type: type, pattern_name: '' }} count={count} />
+                <LabelChip key={type} tag={{ error_type: type, pattern_name: '' }} count={count} />
               ))}
             </div>
           )}
+          {uncheckedCount > 0 &&
+            (canEdit && onConfirmAllTags ? (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+                <span>
+                  {uncheckedCount} AI label{uncheckedCount === 1 ? '' : 's'} not checked yet
+                </span>
+                <button
+                  type="button"
+                  onClick={onConfirmAllTags}
+                  title="Keep every AI label you haven't changed or removed"
+                  className="shrink-0 rounded bg-white px-2 py-1 font-medium text-amber-900 ring-1 ring-inset ring-amber-300 hover:bg-amber-100"
+                >
+                  Keep all
+                </button>
+              </div>
+            ) : (
+              !canEdit && (
+                <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                  Labels marked AI are suggestions — your teacher hasn&apos;t checked them yet.
+                </p>
+              )
+            ))}
           <p className="mt-3 leading-relaxed text-gray-600">Click a marked sentence to see what changed and why.</p>
           <button
             type="button"

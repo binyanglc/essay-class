@@ -5,9 +5,10 @@ import type { Revision } from './revisions';
 import type { SentenceRevision } from '@/types';
 
 /**
- * Error labels (error_tags: "了 usage", "Sentence structure"…) belong to the
- * correction in the composition that fixes them. The link is by text: the
- * correction's words contain the label's words (or the other way round).
+ * Error labels (error_tags) belong to the correction in the composition that
+ * fixes them. Newer labels store the correction's id (revision_id); older ones
+ * are linked by text: the correction's words contain the label's words (or the
+ * other way round).
  */
 
 export interface CorrectionLink {
@@ -21,6 +22,8 @@ interface TagLike {
   original_text: string;
   /** Helps pick the right correction when several contain the label's words. */
   suggested_revision?: string;
+  /** Newer labels know their correction directly. */
+  revision_id?: string | null;
 }
 
 /** Correction numbers in reading order (placed ones first, then the ones that couldn't be placed). */
@@ -36,7 +39,12 @@ export function numberCorrections(placement: Placement<Revision>): Map<string, n
  */
 export function linkTags(text: string, placement: Placement<Revision>, tags: TagLike[]): Map<string, string> {
   const links = new Map<string, string>();
+  const known = new Set([...placement.placed.map((p) => p.rev.id), ...placement.unplaced.map((u) => u.rev.id)]);
   for (const tag of tags) {
+    if (tag.revision_id && known.has(tag.revision_id)) {
+      links.set(tag.id, tag.revision_id);
+      continue;
+    }
     if (!tag.original_text) continue;
     let best: string | undefined;
     let bestScore = 0;
