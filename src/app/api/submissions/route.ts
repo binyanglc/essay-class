@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateFeedback } from '@/lib/ai-feedback';
+import { FEEDBACK_MODEL, generateFeedback } from '@/lib/ai-feedback';
 import { tagRevisions } from '@/lib/ai-tagging';
 import type { AiTagRow } from '@/lib/ai-tagging';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
@@ -100,25 +100,44 @@ export async function POST(request: NextRequest) {
 
     const revisions = anchorRevisions(finalText, feedbackData.sentence_revisions);
 
+    // The AI's feedback as it is first shown to the student and the teacher
+    const aiFeedback = {
+      overall_comment: feedbackData.overall_comment || '',
+      characters_comment: feedbackData.characters_comment || '',
+      vocabulary_comment: feedbackData.vocabulary_comment || '',
+      grammar_comment: feedbackData.grammar_comment || '',
+      content_feedback: feedbackData.content_feedback || '',
+      structure_feedback: feedbackData.structure_feedback || '',
+      sentence_revisions: revisions,
+    };
+
     const { data: feedback } = await supabase
       .from('feedback')
       .insert({
         submission_id: submission.id,
-        overall_comment: feedbackData.overall_comment || '',
+        ...aiFeedback,
         strengths: [],
         main_problems: [],
-        characters_comment: feedbackData.characters_comment || '',
-        vocabulary_comment: feedbackData.vocabulary_comment || '',
-        grammar_comment: feedbackData.grammar_comment || '',
-        content_feedback: feedbackData.content_feedback || '',
-        structure_feedback: feedbackData.structure_feedback || '',
-        sentence_revisions: revisions,
         repeated_error_summary: '',
         next_step_advice: '',
         correction_level: correctionLevel,
       })
       .select()
       .single();
+
+    // Keep a copy of it that the teacher's edits never overwrite (migration v13),
+    // so we can see later what the teacher kept, changed, removed or added.
+    // If it can't be saved (e.g. v13 not run yet), everything else still works.
+    if (feedback) {
+      const { error: originalError } = await supabase.from('feedback_ai_originals').insert({
+        feedback_id: feedback.id,
+        submission_id: submission.id,
+        model: FEEDBACK_MODEL,
+        correction_level: correctionLevel,
+        content: aiFeedback,
+      });
+      if (originalError) console.error('Saving the original AI feedback failed:', originalError);
+    }
 
     // Error labels from the fixed list, one step after the corrections (lib/ai-tagging).
     // If labelling fails the feedback is still saved; the teacher can add labels.

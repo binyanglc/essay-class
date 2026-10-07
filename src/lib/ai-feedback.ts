@@ -1,5 +1,8 @@
 import { AIFeedbackResponse, CorrectionLevel, ErrorPattern } from '@/types';
 
+/** The model that writes the corrections and comments. */
+export const FEEDBACK_MODEL = 'gpt-4o-mini';
+
 const LEVEL_RULES: Record<CorrectionLevel, string> = {
   essential:
     'ESSENTIAL — correct only clear mistakes: wrong characters, grammar errors, wrong words or collocations, and punctuation errors. If a sentence is grammatical and a Chinese teacher would understand it, leave it alone, even if it sounds a little foreign. No style improvements.',
@@ -82,7 +85,7 @@ IMPORTANT:
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: FEEDBACK_MODEL,
       messages: [
         {
           role: 'system',
