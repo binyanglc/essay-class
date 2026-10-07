@@ -16,6 +16,8 @@ export interface LabelFields {
   nature: Nature;
   /** The teacher's own wording (optional). */
   custom_label: string | null;
+  /** HSK 2025 syllabus grammar point (lib/hsk-grammar), optional. */
+  grammar_point?: string | null;
 }
 
 export interface NewTag extends LabelFields {
@@ -45,6 +47,7 @@ export const LABEL_FIELD_NAMES: (keyof LabelFields)[] = [
   'item_learner',
   'nature',
   'custom_label',
+  'grammar_point',
 ];
 
 export const emptyTagEdits = (): TagEdits => ({ deleted: [], deleteReasons: {}, updated: {}, confirmed: [], added: [] });

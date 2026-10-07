@@ -1,5 +1,7 @@
 import { CODES, DOMAINS, RULES, getCode, operationFor } from './error-taxonomy';
 import type { CodeInfo, RuleInfo } from './error-taxonomy';
+import { HSK_GRAMMAR_2025, grammarPointName, grammarPointPath, levelLabel } from './hsk-grammar';
+import type { GrammarPoint } from './hsk-grammar';
 
 /**
  * Finding a label in the list by typing (Chinese or English), and putting the
@@ -19,6 +21,8 @@ export interface LabelHit {
   rule: RuleInfo | null;
   /** Set when the hit is the teacher's own name for a label used in this class. */
   custom: string | null;
+  /** Set when the hit is an HSK grammar point (choosing it picks the point and the code it is counted under). */
+  gp?: GrammarPoint | null;
 }
 
 /** Extra words teachers might type for each label, besides its names, definition and examples. */
@@ -53,6 +57,17 @@ const KEYWORDS: Record<string, string> = {
   'GRAM.BLEND': '杂糅 句式 原因是因为 mixed structure',
   'GRAM.CONJ': '连词 关联词 和 但是 所以 因为 虽然 而且 然后 conjunction',
   'GRAM.OTHER': '其他 other',
+  'GRAM.PROG': '进行态 进行 在 正在 呢 progressive',
+  'GRAM.SPECIAL': '是字句 有字句 存现句 双宾语句 存在 existential double object',
+  'GRAM.SERIAL': '连动句 兼语句 连动 兼语 请 叫 让 使 serial verb pivot causative',
+  'GRAM.PARTICLE': '语气词 语气助词 吧 呢 啊 嘛 啦 罢了 particle',
+  'GRAM.PRON': '代词 人称代词 指示代词 自己 咱们 人家 每 各 任何 pronoun',
+  'GRAM.LOCATIVE': '方位词 方位 上 里 下 中 前 后 边 以前 以后 locative position',
+  'GRAM.NUM': '数词 数字 二 两 概数 序数 钱数 日期 时间 钟点 分数 倍数 number date time',
+  'GRAM.REDUP': '重叠 看看 高高兴兴 个个 reduplication',
+  'GRAM.AFFIX': '词缀 前缀 后缀 们 复数 单复数 第 老 plural affix suffix prefix',
+  'GRAM.PHRASE': '短语 短语结构 短语词性 联合 偏正 动宾 主谓 同位 名词性 动词性 形容词性 phrase',
+  'GRAM.FIXED': '固定格式 固定短语 四字格 话语标记 除了 以外 来说 越来越 换句话说 fixed pattern set phrase idiom',
   'PUNC.BOUNDARY': '断句 句号 逗号 一逗到底 run-on period comma full stop',
   'PUNC.MARK': '标点 顿号 引号 书名号 冒号 punctuation',
   'PUNC.HALFWIDTH': '半角 英文标点 全角 half-width english punctuation',
@@ -100,8 +115,20 @@ function ruleEntry(r: RuleInfo): Entry {
   };
 }
 
+/** A grammar point matches by its words (like a keyword), and by where it sits in the syllabus. */
+function grammarEntry(g: GrammarPoint): Entry {
+  const c = getCode(g.families[0])!;
+  return {
+    hit: { code: c, rule: null, custom: null, gp: g },
+    names: '',
+    keys: norm(`${g.text} ${g.item}`),
+    text: norm(`${grammarPointPath(g)} ${levelLabel(g)} hsk${g.level}`),
+  };
+}
+
 const CODE_ENTRIES = CODES.map(codeEntry);
 const RULE_ENTRIES = RULES.map(ruleEntry);
+const GRAMMAR_ENTRIES = HSK_GRAMMAR_2025.filter((g) => getCode(g.families[0])).map(grammarEntry);
 
 function score(e: Entry, terms: string[]): number {
   let total = 0;
@@ -131,6 +158,10 @@ export function searchLabels(query: string, custom: { code: string; custom_label
   RULE_ENTRIES.forEach((e, i) => {
     const s = score(e, terms);
     if (s) scored.push({ hit: e.hit, s, order: CODES.length + i });
+  });
+  GRAMMAR_ENTRIES.forEach((e, i) => {
+    const s = score(e, terms);
+    if (s) scored.push({ hit: e.hit, s: s - 0.25, order: CODES.length + RULES.length + i });
   });
   const seen = new Set<string>();
   custom.forEach((c, i) => {
@@ -163,7 +194,14 @@ const MARKERS: [string[], string[]][] = [
   [['GRAM.QUESTION'], ['吗', '呢']],
   [['GRAM.CONJ', 'DISC.CONNECT'], ['但是', '可是', '所以', '因为', '虽然', '而且', '然后', '另外', '还有', '和']],
   [['REG.COLLOQ'], ['挺', '啥', '咋']],
+  [['GRAM.PROG'], ['正在']],
+  [['GRAM.AFFIX'], ['们']],
+  [['GRAM.PRON'], ['自己', '咱们', '我们', '他们', '她们', '人家', '这么', '那么', '这样', '那样', '每', '各']],
+  [['GRAM.LOCATIVE'], ['以前', '以后', '上', '里', '下', '中', '前', '后', '边', '面', '外']],
+  [['GRAM.NUM'], ['二', '两']],
 ];
+/** Sentence-final particles (and 了, 吗): a change only among these is about particles. */
+const PARTICLES = new Set(['了', '呢', '吧', '啊', '嘛', '啦', '吗']);
 const MEASURE_WORDS = new Set(['个', '本', '件', '张', '只', '条', '位', '杯', '双', '辆', '台', '家', '次', '遍', '支', '把', '块', '口', '套', '首']);
 const PUNCT = /^[\s,.;:?!'"()，。、；：？！“”‘’（）《》…—-]*$/;
 const ASCII_PUNCT = /[,.;:?!]/;
@@ -193,6 +231,12 @@ export function suggestForChanges(changes: ChangeLike[], max = 4): LabelHit[] {
       continue;
     }
     let found = false;
+    const both = [...l, ...t];
+    if (both.every((ch) => PARTICLES.has(ch)) && both.some((ch) => ch !== '了' && ch !== '吗') && l !== t) {
+      add('GRAM.PARTICLE');
+      if (both.includes('了')) add('GRAM.LE');
+      found = true;
+    }
     for (const [group, markers] of MARKERS) {
       // The change is only about these words
       if (without(l, markers) === without(t, markers)) {
@@ -216,6 +260,7 @@ export function suggestForChanges(changes: ChangeLike[], max = 4): LabelHit[] {
 
 /** Text for one hit in the list. */
 export function hitTitle(h: LabelHit): string {
+  if (h.gp) return grammarPointName(h.gp);
   if (h.custom) return h.custom;
   if (h.rule) return `${h.rule.en} · ${h.rule.zh}`;
   return h.code.en.includes(h.code.zh) ? h.code.en : `${h.code.en} · ${h.code.zh}`;
@@ -223,8 +268,9 @@ export function hitTitle(h: LabelHit): string {
 
 /** Smaller text under a hit (which category a rule or own name belongs to). */
 export function hitSubtitle(h: LabelHit): string {
+  if (h.gp) return `${levelLabel(h.gp)} · ${h.code.en.includes(h.code.zh) ? h.code.en : `${h.code.en} · ${h.code.zh}`}`;
   if (h.custom || h.rule) return h.code.en.includes(h.code.zh) ? h.code.en : `${h.code.en} · ${h.code.zh}`;
   return '';
 }
 
-export const hitKey = (h: LabelHit) => `${h.code.code}|${h.rule?.id ?? ''}|${h.custom ?? ''}`;
+export const hitKey = (h: LabelHit) => `${h.code.code}|${h.rule?.id ?? ''}|${h.custom ?? ''}|${h.gp?.id ?? ''}`;

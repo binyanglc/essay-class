@@ -10,6 +10,7 @@ import {
   operationFor,
   ruleForCode,
 } from '@/lib/error-taxonomy';
+import { isGrammarPoint } from '@/lib/hsk-grammar';
 
 const text = (v: unknown, max = 2000) => (typeof v === 'string' ? v.slice(0, max) : '');
 const short = (v: unknown, max = 40) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       item_target: short(body.item_target),
       item_learner: short(body.item_learner),
       custom_label: short(body.custom_label, 80),
+      grammar_point: isGrammarPoint(body.grammar_point) ? body.grammar_point : null,
     };
 
     const { data, error } = await supabase

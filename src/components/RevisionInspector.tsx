@@ -83,7 +83,8 @@ export default function RevisionInspector(props: Props) {
     a.code === b.code &&
     (a.rule ?? null) === (b.rule ?? null) &&
     (a.item_target ?? null) === (b.item_target ?? null) &&
-    (a.item_learner ?? null) === (b.item_learner ?? null);
+    (a.item_learner ?? null) === (b.item_learner ?? null) &&
+    (a.grammar_point ?? null) === (b.grammar_point ?? null);
   const unchecked = tags.some(isUnconfirmedAi);
   const tipDismissed = useTipDismissed(LABELS_TIP);
 
@@ -146,6 +147,7 @@ export default function RevisionInspector(props: Props) {
                         item_learner: t.item_learner ?? null,
                         nature: (t.nature as LabelFields['nature']) ?? undefined,
                         custom_label: t.custom_label ?? null,
+                        grammar_point: t.grammar_point ?? null,
                       }
                     : undefined;
                 })()

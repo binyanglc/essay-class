@@ -13,6 +13,7 @@ import {
   operationFor,
   ruleForCode,
 } from '@/lib/error-taxonomy';
+import { isGrammarPoint } from '@/lib/hsk-grammar';
 
 const short = (v: unknown, max = 40) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
@@ -35,7 +36,7 @@ export async function PUT(
 
     const { data: current } = await supabase
       .from('error_tags')
-      .select('code, rule, item_target, item_learner, custom_label, source, status')
+      .select('code, rule, item_target, item_learner, custom_label, grammar_point, source, status')
       .eq('id', id)
       .single();
     if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -54,6 +55,7 @@ export async function PUT(
       item_target: current.item_target as string | null,
       item_learner: current.item_learner as string | null,
       custom_label: current.custom_label as string | null,
+      grammar_point: current.grammar_point as string | null,
     };
     if ('code' in body) {
       if (!isCode(body.code)) return NextResponse.json({ error: 'Invalid code' }, { status: 400 });
@@ -72,6 +74,13 @@ export async function PUT(
     }
     if ('custom_label' in body) {
       next.custom_label = short(body.custom_label, 80);
+      labelChanged = true;
+    }
+    if ('grammar_point' in body) {
+      if (body.grammar_point !== null && !isGrammarPoint(body.grammar_point)) {
+        return NextResponse.json({ error: 'Invalid grammar point' }, { status: 400 });
+      }
+      next.grammar_point = body.grammar_point;
       labelChanged = true;
     }
     if ('nature' in body) {

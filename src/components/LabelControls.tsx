@@ -20,6 +20,16 @@ import type { LabelFields } from '@/lib/tag-edits';
 import { hitKey, hitSubtitle, hitTitle, searchLabels, suggestForChanges } from '@/lib/label-search';
 import type { LabelHit } from '@/lib/label-search';
 import { dismissTip, useTipDismissed } from '@/lib/tips';
+import {
+  getGrammarPoint,
+  grammarPointName,
+  grammarPointPath,
+  grammarPointTitle,
+  levelLabel,
+  rankGrammarPoints,
+  grammarPointsFor,
+} from '@/lib/hsk-grammar';
+import type { GrammarPoint } from '@/lib/hsk-grammar';
 
 /** The fields a label chip needs (an ErrorTag, or an unsaved one). */
 export interface TagChip {
@@ -31,6 +41,7 @@ export interface TagChip {
   item_target?: string | null;
   item_learner?: string | null;
   custom_label?: string | null;
+  grammar_point?: string | null;
   nature?: string | null;
   status?: string | null;
   source?: string | null;
@@ -106,6 +117,8 @@ export function LabelChip({
   if (unchecked) notes.push('AI suggestion — not yet checked by the teacher');
   else if (count === undefined && isConfirmed(tag)) notes.push(tag.status === 'added' ? 'Added by the teacher' : 'Checked by the teacher');
   if (count === undefined && tag.nature && tag.nature !== 'error') notes.push(NATURE_LABELS[tag.nature as Nature] ?? '');
+  const gp = count === undefined ? getGrammarPoint(tag.grammar_point) : undefined;
+  if (gp) notes.push(grammarPointTitle(gp));
   const title = notes.filter(Boolean).join(' · ');
   return (
     <span
@@ -123,6 +136,11 @@ export function LabelChip({
         </button>
       ) : (
         <span className="min-w-0 break-words">{text}</span>
+      )}
+      {gp && (
+        <span className="shrink-0 rounded bg-white/70 px-1 text-[9px] font-semibold tracking-wide opacity-80">
+          {levelLabel(gp)}
+        </span>
       )}
       {count === undefined && tag.nature && tag.nature !== 'error' && (
         <span className="rounded bg-white/70 px-1 text-[9px] font-normal opacity-80">
@@ -226,8 +244,12 @@ export function LabelEditor({
   const [learner, setLearner] = useState(initial ? initial.item_learner ?? '' : only?.learner ?? '');
   const [nature, setNature] = useState<Nature>(initial?.nature ?? defaultNature(initial?.code));
   const [custom, setCustom] = useState(initial?.custom_label ?? '');
+  const [grammarPoint, setGrammarPoint] = useState<string | null>(initial?.grammar_point ?? null);
 
   const info = getCode(code);
+  // A grammar point stays only while it is listed under the chosen code
+  const gp = getGrammarPoint(grammarPoint);
+  const gpValid = gp && gp.families.includes(code) ? gp : undefined;
   const rules = rulesFor(code);
   const kind = info?.item ?? 'none';
   const fields: LabelFields | null = info
@@ -238,6 +260,7 @@ export function LabelEditor({
         item_learner: kind === 'pair' ? learner.trim() || null : null,
         nature,
         custom_label: custom.trim() || null,
+        grammar_point: gpValid?.id ?? null,
       }
     : null;
   const customNames = Array.from(new Set(suggestions.filter((s) => s.code === code).map((s) => s.custom_label)));
@@ -253,6 +276,7 @@ export function LabelEditor({
     chooseCode(hit.code.code);
     if (hit.rule) setRule(hit.rule.id);
     if (hit.custom) setCustom(hit.custom);
+    if (hit.gp) setGrammarPoint(hit.gp.id);
   };
   const save = () => fields && onSave(fields);
 
@@ -281,6 +305,16 @@ export function LabelEditor({
             </option>
           ))}
         </select>
+      )}
+
+      {info && grammarPointsFor(code).length > 0 && (
+        <GrammarPointPicker
+          id={`${id}-gp`}
+          code={code}
+          value={gpValid ?? null}
+          changes={changes}
+          onChange={(g) => setGrammarPoint(g?.id ?? null)}
+        />
       )}
 
       {info && kind !== 'none' && (
@@ -370,6 +404,7 @@ export function LabelEditor({
       {fields && (
         <p className="text-[11px] text-gray-500">
           Students see: <span className="font-medium text-gray-800">{tagLabel(fields)}</span>
+          {gpValid && <span className="ml-1 text-gray-500">({levelLabel(gpValid)})</span>}
         </p>
       )}
 
@@ -505,7 +540,7 @@ function LabelPicker({
         onMouseEnter={() => setActive(i)}
         onClick={() => choose(hit)}
         className={`cursor-pointer px-2 py-1 text-xs ${i === current ? 'bg-blue-50 text-blue-900' : 'text-gray-800'} ${
-          hit.code.code === code && !hit.rule && !hit.custom ? 'font-semibold' : ''
+          hit.code.code === code && !hit.rule && !hit.custom && !hit.gp ? 'font-semibold' : ''
         }`}
       >
         <span>{hitTitle(hit)}</span>
@@ -589,6 +624,143 @@ function LabelPicker({
           Keep {info.en}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Optional: which point of the 2025 HSK syllabus the label is about. Points
+ * whose words the correction added, removed or changed are offered first;
+ * the rest can be searched.
+ */
+function GrammarPointPicker({
+  id,
+  code,
+  value,
+  changes,
+  onChange,
+}: {
+  id: string;
+  code: string;
+  value: GrammarPoint | null;
+  changes: ChangePair[];
+  onChange: (g: GrammarPoint | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const changed = changes.flatMap((c) => [c.learner, c.target]).filter(Boolean);
+  const { fits, rest } = rankGrammarPoints(code, changed);
+  const q = query.trim().toLowerCase();
+  const matches = (g: GrammarPoint) =>
+    `${g.text} ${g.item} ${grammarPointPath(g)} ${levelLabel(g)}`.toLowerCase().includes(q);
+  const shownFits = q ? fits.filter(matches) : fits;
+  const shownRest = q ? rest.filter(matches) : rest;
+  const first = shownFits[0] ?? shownRest[0];
+  const label = 'text-[11px] font-medium text-gray-600';
+  const optionText = (g: GrammarPoint) => `${levelLabel(g)} · ${grammarPointName(g)}`;
+  const chipCls = 'rounded bg-white px-1.5 py-0.5 text-gray-700 ring-1 ring-inset ring-gray-200 hover:bg-gray-50';
+
+  if (value) {
+    return (
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 text-[11px]">
+          <span className={label}>HSK grammar point: </span>
+          <span className="font-medium text-gray-900" title={grammarPointTitle(value)}>
+            {optionText(value)}
+          </span>
+          <span className="block text-gray-500">{grammarPointPath(value)}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          aria-label="Remove grammar point"
+          title="Remove grammar point"
+          className="shrink-0 px-1 text-sm leading-none text-gray-500 hover:text-red-600"
+        >
+          &times;
+        </button>
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <div className="flex flex-wrap items-center gap-1 text-[11px]">
+        <span className={label}>HSK grammar point (optional):</span>
+        {fits.slice(0, 2).map((g) => (
+          <button key={g.id} type="button" title={grammarPointTitle(g)} onClick={() => onChange(g)} className={chipCls}>
+            {optionText(g)}
+          </button>
+        ))}
+        <button type="button" onClick={() => setOpen(true)} className="font-medium text-blue-600 hover:underline">
+          {fits.length ? 'More…' : 'Choose…'}
+        </button>
+      </div>
+    );
+  }
+  const option = (g: GrammarPoint) => (
+    <div
+      key={g.id}
+      role="option"
+      aria-selected={g === first}
+      title={grammarPointTitle(g)}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onChange(g)}
+      className={`cursor-pointer px-2 py-1 text-xs text-gray-800 hover:bg-blue-50 ${g === first ? 'bg-blue-50/60' : ''}`}
+    >
+      <span>{optionText(g)}</span>
+      <span className="ml-1 text-[11px] text-gray-500">{grammarPointPath(g)}</span>
+    </div>
+  );
+  const heading = (text: string) => (
+    <div role="presentation" className="sticky top-0 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+      {text}
+    </div>
+  );
+  return (
+    <div>
+      <input
+        id={`${id}-search`}
+        aria-label="Search grammar points"
+        autoFocus
+        autoComplete="off"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (first) onChange(first);
+          } else if (e.key === 'Escape') {
+            // First Escape clears the search, the next closes the list (not the label editor)
+            e.stopPropagation();
+            if (query) setQuery('');
+            else setOpen(false);
+          }
+        }}
+        placeholder="Search HSK 2025 grammar points…"
+        className={`${inputCls} w-full`}
+      />
+      <div
+        role="listbox"
+        aria-label="Grammar points"
+        className="mt-1 max-h-48 overflow-y-auto rounded border border-gray-200 bg-white py-0.5"
+      >
+        {!first && <p className="px-2 py-1.5 text-[11px] text-gray-500">No grammar point matches.</p>}
+        {shownFits.length > 0 && (
+          <>
+            {heading('Fits this correction')}
+            {shownFits.map(option)}
+          </>
+        )}
+        {shownRest.length > 0 && (
+          <>
+            {shownFits.length > 0 && heading('All')}
+            {shownRest.map(option)}
+          </>
+        )}
+      </div>
+      <button type="button" onClick={() => setOpen(false)} className="mt-1 text-[11px] text-gray-500 hover:text-gray-800">
+        Skip
+      </button>
     </div>
   );
 }

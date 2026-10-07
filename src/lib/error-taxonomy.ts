@@ -1,13 +1,17 @@
 /**
- * The error label list (taxonomy v1-rc2, see the project doc
- * claude/error-tag-taxonomy.md).
+ * The error label list (taxonomy v1-rc3, see the project docs
+ * claude/error-tag-taxonomy.md and claude/hsk2025-grammar-import.md).
  *
  * Three layers:
  *   domain   (7)  — Characters, Vocabulary, Grammar, …   → error_tags.error_type
- *   code     (40) — e.g. GRAM.LE (了), VOC.COLLOC          → error_tags.code
+ *   code     (51) — e.g. GRAM.LE (了), VOC.COLLOC          → error_tags.code
  *   item          — what exactly went wrong:
  *                   a pair of words ("认识 ← 知道"),        → error_tags.item_target / item_learner
- *                   or a misuse rule (R.LE.NEG)            → error_tags.rule
+ *                   a misuse rule (R.LE.NEG),              → error_tags.rule
+ *                   an HSK 2025 grammar point (H25-1-025)  → error_tags.grammar_point
+ *
+ * v1-rc3 (2026-10-07) added 11 grammar codes for the 2025 HSK syllabus
+ * (GRAM.PROG … GRAM.FIXED). Teachers can use them; the AI doesn't yet (ai: false).
  *
  * The AI and the teacher both choose from this list, so the same problem is
  * always counted under the same name. A teacher can still give a label their
@@ -15,8 +19,9 @@
  */
 
 import type { ErrorType } from '@/types';
+import { getGrammarPoint, grammarPointName } from './hsk-grammar';
 
-export const TAXONOMY_VERSION = 'v1-rc2';
+export const TAXONOMY_VERSION = 'v1-rc3';
 
 export type Domain = 'CHAR' | 'VOC' | 'GRAM' | 'PUNC' | 'DISC' | 'REG' | 'EXPR';
 /** error = wrong; infelicity = acceptable but unnatural; variant = regional / script variant, not wrong. */
@@ -206,6 +211,17 @@ export const CODES: CodeInfo[] = [
     item: 'word',
   },
   {
+    code: 'GRAM.PROG',
+    domain: 'GRAM',
+    en: 'Progressive (在 / 正在 … 呢)',
+    zh: '进行态',
+    definition: 'Progressive aspect: 在 / 正在 before the verb, 呢 at the end. (过 and 着 are GRAM.GUOZHE.)',
+    examples: ['*我在吃饭了 → 我在吃饭呢'],
+    item: 'none',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
     code: 'GRAM.DE',
     domain: 'GRAM',
     en: '的 / 地 / 得 (de)',
@@ -260,6 +276,28 @@ export const CODES: CodeInfo[] = [
     item: 'none',
   },
   {
+    code: 'GRAM.SPECIAL',
+    domain: 'GRAM',
+    en: '是 / 有 / existential / double-object sentences',
+    zh: '是字句、有字句、存现句、双宾语句',
+    definition: '是 sentences, 有 sentences, existential sentences (place + 有 / 是 / verb + 着 + thing) and double-object sentences.',
+    examples: ['*在桌子上有一本书 → 桌子上有一本书'],
+    item: 'none',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.SERIAL',
+    domain: 'GRAM',
+    en: 'Serial verbs & pivot sentences (请 / 叫 / 让 / 使)',
+    zh: '连动句、兼语句',
+    definition: 'Two verb phrases in a row (去商店买东西), and pivot sentences with 请 / 叫 / 让 / 使.',
+    examples: ['*这件事使我很高兴了 → 这件事使我很高兴'],
+    item: 'none',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
     code: 'GRAM.NEG',
     domain: 'GRAM',
     en: 'Negation (不 / 没)',
@@ -296,6 +334,17 @@ export const CODES: CodeInfo[] = [
     item: 'pair',
   },
   {
+    code: 'GRAM.PARTICLE',
+    domain: 'GRAM',
+    en: 'Sentence-final particles (吧 / 呢 / 啊 / 嘛)',
+    zh: '语气词',
+    definition: 'Sentence-final particles 吧, 呢, 啊, 嘛, 啦, 罢了 wrong, missing or extra. (吗 and question forms are GRAM.QUESTION; sentence-final 了 is GRAM.LE.)',
+    examples: ['*你快来呢！ → 你快来吧！'],
+    item: 'word',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
     code: 'GRAM.QUESTION',
     domain: 'GRAM',
     en: 'Questions',
@@ -303,6 +352,61 @@ export const CODES: CodeInfo[] = [
     definition: 'Question forms: 吗, question words, A-not-A questions, 呢.',
     examples: ['*你去哪儿吗？ → 你去哪儿？'],
     item: 'none',
+  },
+  {
+    code: 'GRAM.PRON',
+    domain: 'GRAM',
+    en: 'Pronouns',
+    zh: '代词',
+    definition: 'Personal and demonstrative pronouns: 自己, 咱们, 人家, 每, 各, 任何, 这么, 那样 …',
+    examples: ['*每个人都有他们的爱好 → 每个人都有自己的爱好'],
+    item: 'pair',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.LOCATIVE',
+    domain: 'GRAM',
+    en: 'Locative words (上 / 里 / 以前)',
+    zh: '方位词',
+    definition: 'Locative words missing or wrong: 上, 里, 下, 中, 前, 后, 边, and frames like 在……上 / 在……以前.',
+    examples: ['*我的书在桌子 → 我的书在桌子上'],
+    item: 'pair',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.NUM',
+    domain: 'GRAM',
+    en: 'Numbers, dates & time',
+    zh: '数的表达',
+    definition: 'Numbers (二 / 两), approximate numbers, ordinals, money, dates and clock times, fractions and multiples.',
+    examples: ['*我有二个哥哥 → 我有两个哥哥'],
+    item: 'pair',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.REDUP',
+    domain: 'GRAM',
+    en: 'Reduplication',
+    zh: '重叠',
+    definition: 'Reduplicated verbs, adjectives, measure words and numeral + measure phrases (看看, 高高兴兴, 个个).',
+    examples: ['*他高兴高兴地走了 → 他高高兴兴地走了'],
+    item: 'word',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.AFFIX',
+    domain: 'GRAM',
+    en: 'Affixes (们, 第, 老 …)',
+    zh: '词缀（们、第、老、—子……）',
+    definition: 'Prefixes and suffixes wrong, missing or extra, including plural 们 (*三个学生们).',
+    examples: ['*我有三个好朋友们 → 我有三个好朋友'],
+    item: 'word',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
   },
   {
     code: 'GRAM.ORDER',
@@ -341,6 +445,28 @@ export const CODES: CodeInfo[] = [
       'Conjunctions and paired connectives inside one sentence (和 joining verbs, 虽然……但是, 因为……所以). Between sentences is DISC.CONNECT.',
     examples: ['*我吃了饭和去了图书馆 → 我吃了饭，然后去了图书馆', '*虽然很累，所以…… → 虽然很累，但是……'],
     item: 'pair',
+  },
+  {
+    code: 'GRAM.PHRASE',
+    domain: 'GRAM',
+    en: 'Phrase structure & type',
+    zh: '短语结构、短语词性',
+    definition: "The syllabus's phrase types: coordinate, modifier + head, verb + object, subject + predicate, appositive; noun, verb and adjective phrases.",
+    examples: ['*我喜欢中国的文化和吃 → 我喜欢中国的文化和中国菜'],
+    item: 'none',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
+  },
+  {
+    code: 'GRAM.FIXED',
+    domain: 'GRAM',
+    en: 'Fixed patterns & set phrases',
+    zh: '固定格式、固定短语',
+    definition: 'Fixed patterns, four-character frames, set phrases and discourse markers from the syllabus (除了……以外, 对……来说, 越来越, 换句话说 …) used wrongly or incompletely.',
+    examples: ['*除了他，我们也都去了以外 → 除了他以外，我们也都去了'],
+    item: 'none',
+    // Added with the 2025 HSK syllabus (v1-rc3): teachers can use it; the AI not yet
+    ai: false,
   },
   {
     code: 'GRAM.OTHER',
@@ -573,6 +699,8 @@ export function isDeleteReason(v: unknown): v is DeleteReason {
 export interface LabelLike {
   code?: string | null;
   rule?: string | null;
+  /** HSK syllabus grammar point (lib/hsk-grammar), e.g. H25-1-025. */
+  grammar_point?: string | null;
   item_target?: string | null;
   item_learner?: string | null;
   custom_label?: string | null;
@@ -590,14 +718,26 @@ export function itemText(t: Pick<LabelLike, 'item_target' | 'item_learner'>): st
   return '';
 }
 
-/** What exactly went wrong, without the code: a rule, or the words ('' when the label names neither). */
+/** The words a label records ('' when its code records none, or none were given). */
+function wordsLabel(c: CodeInfo, t: LabelLike): string {
+  if (c.item === 'none') return '';
+  if (c.item === 'word') return (t.item_target ?? '').trim() || (t.item_learner ?? '').trim();
+  return itemText(t);
+}
+
+/**
+ * What exactly went wrong, without the code: a misuse rule, else the words,
+ * else the HSK grammar point ('' when the label names none of them).
+ */
 export function itemLabel(t: LabelLike): string {
   const rule = getRule(t.rule);
   if (rule) return rule.en;
   const c = getCode(t.code);
-  if (!c || c.item === 'none') return '';
-  if (c.item === 'word') return (t.item_target ?? '').trim() || (t.item_learner ?? '').trim();
-  return itemText(t);
+  if (!c) return '';
+  const words = wordsLabel(c, t);
+  if (words) return words;
+  const gp = getGrammarPoint(t.grammar_point);
+  return gp ? grammarPointName(gp) : '';
 }
 
 /** Name of a label as people see it. */
@@ -635,8 +775,9 @@ export function itemKey(t: LabelLike): string {
   const c = getCode(t.code);
   if (!c) return '';
   if (getRule(t.rule)) return t.rule!;
-  const label = itemLabel(t);
-  return label ? `${c.item}:${label}` : '';
+  const words = wordsLabel(c, t);
+  if (words) return `${c.item}:${words}`;
+  return getGrammarPoint(t.grammar_point) ? `gp:${t.grammar_point}` : '';
 }
 
 /** Removal of a word or a swap, from what the student wrote to the fix. */

@@ -246,7 +246,8 @@ export default function ProjectDetailPage() {
     (t.code ?? null) === l.code &&
     (t.rule ?? null) === l.rule &&
     (t.item_target ?? null) === l.item_target &&
-    (t.item_learner ?? null) === l.item_learner;
+    (t.item_learner ?? null) === l.item_learner &&
+    (t.grammar_point ?? null) === (l.grammar_point ?? null);
 
   const handleAddTag = (tag: Omit<NewTag, 'id'>) => {
     // Already labelled like this: nothing to add
@@ -307,6 +308,7 @@ export default function ProjectDetailPage() {
           item_learner: t.item_learner,
           nature: t.nature,
           custom_label: t.custom_label,
+          grammar_point: t.grammar_point ?? null,
           original_text: t.original_text,
           suggested_revision: t.suggested_revision,
           explanation: t.explanation,
