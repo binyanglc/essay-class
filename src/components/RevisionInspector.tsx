@@ -194,21 +194,7 @@ export default function RevisionInspector(props: Props) {
       </div>
 
       <div className="space-y-3 px-4 py-3">
-        {editing
-          ? item.source === 'teacher' && <div className="flex flex-wrap items-center gap-1.5">{teacherBadge}</div>
-          : (tags.length > 0 || item.source === 'teacher' || canLabel) && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {teacherBadge}
-                {labelChips}
-              </div>
-            )}
-        {!canEdit && unchecked && (
-          <p className="text-[11px] leading-snug text-gray-400">
-            Labels marked AI are suggestions — your teacher hasn&apos;t checked them yet.
-          </p>
-        )}
-        {!editing && canLabel && <LabelsTip />}
-        {!editing && labelForms}
+        {item.source === 'teacher' && <div className="flex flex-wrap items-center gap-1.5">{teacherBadge}</div>}
 
         {!ops && (
           <p className="rounded-md bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
@@ -266,7 +252,7 @@ export default function RevisionInspector(props: Props) {
         </div>
         )}
 
-        {editing && (canLabel || tags.length > 0) && (
+        {(canLabel || tags.length > 0) && (
           <div>
             <p className={label}>Labels</p>
             {canLabel && (
@@ -282,6 +268,11 @@ export default function RevisionInspector(props: Props) {
                 </span>
               )}
             </div>
+            {!canEdit && unchecked && (
+              <p className="mt-1 text-[11px] leading-snug text-gray-400">
+                Labels marked AI are suggestions — your teacher hasn&apos;t checked them yet.
+              </p>
+            )}
             {labelBusy && <div className="mt-2 space-y-2">{labelForms}</div>}
           </div>
         )}
