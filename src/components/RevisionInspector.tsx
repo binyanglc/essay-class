@@ -9,7 +9,8 @@ import { isUnconfirmedAi, tagLabel } from '@/lib/error-taxonomy';
 import type { LabelFields } from '@/lib/tag-edits';
 import type { DraftLabels } from '@/lib/draft-labels';
 import { DiffOps, NumberBadge } from './TrackChangesView';
-import { LabelChip, LabelEditor, RemoveReasonPrompt, changesFromOps } from './LabelControls';
+import { LABELS_TIP, LabelChip, LabelEditor, LabelsTip, RemoveReasonPrompt, changesFromOps } from './LabelControls';
+import { useTipDismissed } from '@/lib/tips';
 import type { LabelSuggestion, TagChip } from './LabelControls';
 
 export type { LabelSuggestion, TagChip } from './LabelControls';
@@ -84,6 +85,7 @@ export default function RevisionInspector(props: Props) {
     (a.item_target ?? null) === (b.item_target ?? null) &&
     (a.item_learner ?? null) === (b.item_learner ?? null);
   const unchecked = tags.some(isUnconfirmedAi);
+  const tipDismissed = useTipDismissed(LABELS_TIP);
 
   const teacherBadge = item.source === 'teacher' && (
     <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
@@ -205,6 +207,7 @@ export default function RevisionInspector(props: Props) {
             Labels marked AI are suggestions — your teacher hasn&apos;t checked them yet.
           </p>
         )}
+        {!editing && canLabel && <LabelsTip />}
         {!editing && labelForms}
 
         {!ops && (
@@ -266,9 +269,14 @@ export default function RevisionInspector(props: Props) {
         {editing && (canLabel || tags.length > 0) && (
           <div>
             <p className={label}>Labels</p>
+            {canLabel && (
+              <div className="mt-1">
+                <LabelsTip />
+              </div>
+            )}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {labelChips}
-              {tags.length === 0 && labelEditing === null && (
+              {tags.length === 0 && labelEditing === null && tipDismissed && (
                 <span className="text-[11px] leading-snug text-gray-400">
                   Add a label so this counts in the student&apos;s error patterns and Common Issues
                 </span>

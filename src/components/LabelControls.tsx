@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { DiffOp } from '@/lib/track-changes';
 import {
   DELETE_REASONS,
@@ -16,6 +17,9 @@ import {
 } from '@/lib/error-taxonomy';
 import type { DeleteReason, Nature } from '@/lib/error-taxonomy';
 import type { LabelFields } from '@/lib/tag-edits';
+import { hitKey, hitSubtitle, hitTitle, searchLabels, suggestForChanges } from '@/lib/label-search';
+import type { LabelHit } from '@/lib/label-search';
+import { dismissTip, useTipDismissed } from '@/lib/tips';
 
 /** The fields a label chip needs (an ErrorTag, or an unsaved one). */
 export interface TagChip {
@@ -244,6 +248,12 @@ export function LabelEditor({
     if (!rulesFor(next).some((r) => r.id === rule)) setRule('');
     setCode(next);
   };
+  /** A category, a misuse rule (category + rule) or the class's own name (category + name). */
+  const pick = (hit: LabelHit) => {
+    chooseCode(hit.code.code);
+    if (hit.rule) setRule(hit.rule.id);
+    if (hit.custom) setCustom(hit.custom);
+  };
   const save = () => fields && onSave(fields);
 
   return (
@@ -253,25 +263,7 @@ export function LabelEditor({
         if (e.key === 'Escape') onCancel();
       }}
     >
-      <select
-        id={`${id}-code`}
-        aria-label="Label"
-        autoFocus
-        value={code}
-        onChange={(e) => chooseCode(e.target.value)}
-        className={`${inputCls} w-full`}
-      >
-        <option value="">Choose a label…</option>
-        {codesByDomain().map(({ domain, codes }) => (
-          <optgroup key={domain.id} label={`${domain.en} · ${domain.zh}`}>
-            {codes.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.en.includes(c.zh) ? c.en : `${c.en} · ${c.zh}`}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      <LabelPicker id={id} code={code} changes={changes} suggestions={suggestions} onPick={pick} />
       {info && <p className="text-[11px] leading-snug text-gray-500">{info.definition}</p>}
 
       {rules.length > 0 && (
@@ -394,6 +386,209 @@ export function LabelEditor({
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+export const LABELS_TIP = 'labels-intro';
+
+/** First-time note for teachers: labels are what the tracking is built from. */
+export function LabelsTip() {
+  const dismissed = useTipDismissed(LABELS_TIP);
+  if (dismissed) return null;
+  return (
+    <div role="note" className="rounded-md bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900 ring-1 ring-inset ring-blue-200">
+      <p>
+        <b className="font-semibold">Labels build the tracking.</b>{' '}
+        Each student&apos;s long-term error patterns and your class&apos;s Common Issues come only from labels — a
+        correction without a label isn&apos;t counted there.
+      </p>
+      <button
+        type="button"
+        onClick={() => dismissTip(LABELS_TIP)}
+        className="mt-1 font-medium text-blue-700 hover:underline"
+      >
+        Got it
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Choose the label: type to search (Chinese or English — 了, 补语, 把, word
+ * choice…), or browse the list. Before typing, labels that fit the
+ * correction's changed words come first.
+ */
+function LabelPicker({
+  id,
+  code,
+  changes,
+  suggestions,
+  onPick,
+}: {
+  id: string;
+  code: string;
+  changes: ChangePair[];
+  suggestions: LabelSuggestion[];
+  onPick: (hit: LabelHit) => void;
+}) {
+  const info = getCode(code);
+  const [open, setOpen] = useState(!info);
+  const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
+
+  const results = query.trim() ? searchLabels(query, suggestions).slice(0, 30) : [];
+  const fits = query.trim() ? [] : suggestForChanges(changes);
+  const browse = query.trim()
+    ? []
+    : codesByDomain().map(({ domain, codes }) => ({
+        heading: `${domain.en} · ${domain.zh}`,
+        hits: codes.map((c): LabelHit => ({ code: c, rule: null, custom: null })),
+      }));
+  // Everything in the list, in order, for the arrow keys
+  const items: LabelHit[] = query.trim() ? results : [...fits, ...browse.flatMap((g) => g.hits)];
+  const current = Math.min(active, Math.max(items.length - 1, 0));
+  const optionId = (i: number) => `${id}-option-${i}`;
+
+  const choose = (hit: LabelHit) => {
+    onPick(hit);
+    setOpen(false);
+    setQuery('');
+    setActive(0);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(items.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)));
+      setActive(next);
+      document.getElementById(optionId(next))?.scrollIntoView?.({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (items[current]) choose(items[current]);
+    } else if (e.key === 'Escape' && (query || info)) {
+      // First Escape clears the search (or keeps the label already chosen); the next one closes the editor
+      e.stopPropagation();
+      if (query) {
+        setQuery('');
+        setActive(0);
+      } else setOpen(false);
+    }
+  };
+
+  if (!open && info) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 text-xs font-medium text-gray-900">{info.en.includes(info.zh) ? info.en : `${info.en} · ${info.zh}`}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="shrink-0 text-[11px] font-medium text-blue-600 hover:underline"
+        >
+          Choose another
+        </button>
+      </div>
+    );
+  }
+
+  // Where each browse group starts in `items`
+  const groupStarts = browse.map((_, gi) => fits.length + browse.slice(0, gi).reduce((n, g) => n + g.hits.length, 0));
+  const option = (hit: LabelHit, i: number, keyPrefix: string) => {
+    const sub = hitSubtitle(hit);
+    return (
+      <div
+        key={`${keyPrefix}-${hitKey(hit)}`}
+        id={optionId(i)}
+        role="option"
+        aria-selected={i === current}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseEnter={() => setActive(i)}
+        onClick={() => choose(hit)}
+        className={`cursor-pointer px-2 py-1 text-xs ${i === current ? 'bg-blue-50 text-blue-900' : 'text-gray-800'} ${
+          hit.code.code === code && !hit.rule && !hit.custom ? 'font-semibold' : ''
+        }`}
+      >
+        <span>{hitTitle(hit)}</span>
+        {sub && (
+          <span className="ml-1 text-[11px] text-gray-500">
+            {hit.custom ? 'your label · ' : ''}
+            {sub}
+          </span>
+        )}
+      </div>
+    );
+  };
+  const heading = (text: string) => (
+    <div role="presentation" className="sticky top-0 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+      {text}
+    </div>
+  );
+
+  return (
+    <div>
+      <input
+        id={`${id}-search`}
+        role="combobox"
+        aria-label="Search labels"
+        aria-expanded="true"
+        aria-controls={`${id}-options`}
+        aria-activedescendant={items.length ? optionId(current) : undefined}
+        aria-autocomplete="list"
+        autoFocus
+        autoComplete="off"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActive(0);
+        }}
+        onKeyDown={onKeyDown}
+        placeholder="Search: 了, 补语, 把, 量词, word choice…"
+        className={`${inputCls} w-full`}
+      />
+      <div
+        id={`${id}-options`}
+        role="listbox"
+        aria-label="Labels"
+        className="mt-1 max-h-56 overflow-y-auto rounded border border-gray-200 bg-white py-0.5"
+      >
+        {query.trim() ? (
+          results.length ? (
+            results.map((h, i) => option(h, i, 'r'))
+          ) : (
+            <p className="px-2 py-1.5 text-[11px] leading-snug text-gray-500">
+              No label matches “{query.trim()}”. Try another word (Chinese or English), or choose Other grammar and add
+              your own name.
+            </p>
+          )
+        ) : (
+          <>
+            {fits.length > 0 && (
+              <>
+                {heading('Fits this correction')}
+                {fits.map((h, i) => option(h, i, 'fit'))}
+              </>
+            )}
+            {browse.map((g, gi) => (
+              <div key={g.heading} role="group" aria-label={g.heading}>
+                {heading(g.heading)}
+                {g.hits.map((h, i) => option(h, groupStarts[gi] + i, 'all'))}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+      {info && (
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setQuery('');
+          }}
+          className="mt-1 text-[11px] text-gray-500 hover:text-gray-800"
+        >
+          Keep {info.en}
+        </button>
+      )}
     </div>
   );
 }
