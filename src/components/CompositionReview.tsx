@@ -9,6 +9,16 @@ import type { ErrorTag, FeedbackComment, SentenceRevision } from '@/types';
 import { isActive, isUnconfirmedAi } from '@/lib/error-taxonomy';
 import type { DeleteReason } from '@/lib/error-taxonomy';
 import type { LabelFields, NewTag } from '@/lib/tag-edits';
+import {
+  draftAddLabel,
+  draftConfirmLabel,
+  draftRemoveLabel,
+  draftUpdateLabel,
+  emptyDraftLabels,
+  hasDraftLabels,
+  withDraftLabels,
+} from '@/lib/draft-labels';
+import type { DraftLabels } from '@/lib/draft-labels';
 import TrackChangesView, { DEL_CLASS, DiffOps, INS_CLASS, NumberBadge } from './TrackChangesView';
 import type { EssayMode } from './TrackChangesView';
 import RevisionInspector from './RevisionInspector';
@@ -175,7 +185,8 @@ export default function CompositionReview({
     const d = draft;
     if (!d) return list;
     if (d.isNew) {
-      const unchanged = d.revised.trim() === (d.original ?? '').trim() && !d.explanation.trim();
+      const unchanged =
+        d.revised.trim() === (d.original ?? '').trim() && !d.explanation.trim() && !d.labels?.added.length;
       if (unchanged) return list;
       return [
         ...list,
@@ -203,11 +214,35 @@ export default function CompositionReview({
     );
   }
 
+  /**
+   * Sends the label changes made while editing a correction to the page, once
+   * the correction itself is saved. New labels quote the final suggestion.
+   */
+  function flushDraftLabels(d: Draft) {
+    const labels = d.labels;
+    if (!hasDraftLabels(labels)) return;
+    const placed = placedById.get(d.id);
+    for (const [id, reason] of Object.entries(labels.removed)) onRemoveTag?.(id, reason);
+    for (const [id, fields] of Object.entries(labels.updated)) onUpdateTag?.(id, fields);
+    for (const id of labels.confirmed) onConfirmTag?.(id);
+    for (const a of labels.added) {
+      onAddTag?.({
+        ...a.fields,
+        original_text: placed ? text.slice(placed.start, placed.end) : d.original ?? '',
+        suggested_revision: placed ? placed.revised : d.revised,
+        explanation: '',
+        revision_id: d.id,
+      });
+    }
+  }
+
   function commitDraft() {
     if (draft && revs && onChangeRevisions) {
       const next = applyDraft(revs);
       if (next !== revs) onChangeRevisions(next);
       else if (draft.isNew) setActiveId((cur) => (cur === draft.id ? null : cur));
+      // A new correction that wasn't kept takes its labels with it
+      if (next !== revs || !draft.isNew) flushDraftLabels(draft);
     }
     setDraft(null);
   }
@@ -265,6 +300,7 @@ export default function CompositionReview({
     if (!revs || !onChangeRevisions) return;
     const words = text.slice(start, end);
     const list = applyDraft(revs);
+    if (draft && (list !== revs || !draft.isNew)) flushDraftLabels(draft);
     if (attachId) {
       const id = attachId;
       onChangeRevisions(
@@ -334,6 +370,10 @@ export default function CompositionReview({
     if (!active) return null;
     const discussion = discussionFor(active);
     const placedActive = placedById.get(active.id);
+    // While the correction is being edited, label changes wait in the draft until Done
+    const editingActive = canEdit && draft?.id === active.id ? draft : null;
+    const editDraftLabels = (fn: (l: DraftLabels) => DraftLabels) =>
+      setDraft((d) => (d && d.id === active.id ? { ...d, labels: fn(d.labels ?? emptyDraftLabels()) } : d));
     return (
       <RevisionInspector
         key={active.id}
@@ -343,7 +383,7 @@ export default function CompositionReview({
         n={numbers.get(active.id) ?? 0}
         total={ordered.length}
         canEdit={canEdit}
-        tags={tagsFor(active.id)}
+        tags={editingActive ? withDraftLabels(tagsFor(active.id), editingActive.labels) : tagsFor(active.id)}
         draft={draft}
         discussion={discussion.node}
         discussionCount={discussion.count}
@@ -362,21 +402,36 @@ export default function CompositionReview({
           setAttachId(active.id);
           setChosenMode('track');
         }}
-        onRemoveTag={canEdit ? onRemoveTag : undefined}
+        onRemoveTag={
+          canEdit && onRemoveTag
+            ? (id, reason) =>
+                editingActive ? editDraftLabels((l) => draftRemoveLabel(l, id, reason)) : onRemoveTag(id, reason)
+            : undefined
+        }
         onAddTag={
           canEdit && onAddTag
             ? (lbl) =>
-                onAddTag({
-                  ...lbl,
-                  original_text: placedActive ? text.slice(placedActive.start, placedActive.end) : active.original,
-                  suggested_revision: placedActive ? placedActive.revised : active.revised,
-                  explanation: '',
-                  revision_id: active.id,
-                })
+                editingActive
+                  ? editDraftLabels((l) => draftAddLabel(l, lbl))
+                  : onAddTag({
+                      ...lbl,
+                      original_text: placedActive ? text.slice(placedActive.start, placedActive.end) : active.original,
+                      suggested_revision: placedActive ? placedActive.revised : active.revised,
+                      explanation: '',
+                      revision_id: active.id,
+                    })
             : undefined
         }
-        onUpdateTag={canEdit ? onUpdateTag : undefined}
-        onConfirmTag={canEdit ? onConfirmTag : undefined}
+        onUpdateTag={
+          canEdit && onUpdateTag
+            ? (id, lbl) => (editingActive ? editDraftLabels((l) => draftUpdateLabel(l, id, lbl)) : onUpdateTag(id, lbl))
+            : undefined
+        }
+        onConfirmTag={
+          canEdit && onConfirmTag
+            ? (id) => (editingActive ? editDraftLabels((l) => draftConfirmLabel(l, id)) : onConfirmTag(id))
+            : undefined
+        }
         labelSuggestions={labelSuggestions}
       />
     );
