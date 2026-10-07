@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { FEEDBACK_MODEL, generateFeedback } from '@/lib/ai-feedback';
+import { feedbackModel, generateFeedback } from '@/lib/ai-feedback';
 import { tagRevisions } from '@/lib/ai-tagging';
 import type { AiTagRow } from '@/lib/ai-tagging';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       const { error: originalError } = await supabase.from('feedback_ai_originals').insert({
         feedback_id: feedback.id,
         submission_id: submission.id,
-        model: FEEDBACK_MODEL,
+        model: feedbackModel(),
         correction_level: correctionLevel,
         content: aiFeedback,
       });

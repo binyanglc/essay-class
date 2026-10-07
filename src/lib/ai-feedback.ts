@@ -1,7 +1,24 @@
 import { AIFeedbackResponse, CorrectionLevel, ErrorPattern } from '@/types';
+import { samplingParams, usageFrom } from './ai-models';
+import type { AiUsage, ReasoningEffort } from './ai-models';
 
-/** The model that writes the corrections and comments. */
+/** The model that writes the corrections and comments (override with OPENAI_FEEDBACK_MODEL). */
 export const FEEDBACK_MODEL = 'gpt-4o-mini';
+
+export interface FeedbackOptions {
+  model?: string;
+  /** For reasoning models only (see lib/ai-models). */
+  reasoningEffort?: ReasoningEffort;
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+  /** Told the tokens and time the call used. */
+  onUsage?: (usage: AiUsage) => void;
+}
+
+/** Which model writes the feedback: option → OPENAI_FEEDBACK_MODEL → default. */
+export function feedbackModel(opts: FeedbackOptions = {}): string {
+  return opts.model ?? (process.env.OPENAI_FEEDBACK_MODEL?.trim() || FEEDBACK_MODEL);
+}
 
 const LEVEL_RULES: Record<CorrectionLevel, string> = {
   essential:
@@ -16,10 +33,12 @@ export async function generateFeedback(
   text: string,
   errorPatterns: ErrorPattern[],
   previousSubmissionCount: number,
-  level: CorrectionLevel = 'standard'
+  level: CorrectionLevel = 'standard',
+  opts: FeedbackOptions = {}
 ): Promise<AIFeedbackResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
+  const model = feedbackModel(opts);
 
   let historyContext = '';
   if (previousSubmissionCount > 0 && errorPatterns.length > 0) {
@@ -75,17 +94,18 @@ EXPLANATION RULES for sentence_revisions:
 IMPORTANT:
 - sentence_revisions may be an empty array if nothing needs correcting at this level
 - content_feedback and structure_feedback are REQUIRED
-- All explanations in English; Chinese only in original/revised text
+- Write explanations and comments in English, but write every Chinese character, word or sentence you mention in Chinese characters (in the student's script), as in the examples above. Never use pinyin alone; pinyin may follow in parentheses. Example: "Replace 要 with 希望", not "Replace yao with xiwang".
 - Return valid JSON only`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const started = Date.now();
+  const response = await (opts.fetchImpl ?? fetch)('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: FEEDBACK_MODEL,
+      model,
       messages: [
         {
           role: 'system',
@@ -94,7 +114,8 @@ IMPORTANT:
         },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.3,
+      // temperature 0.3, or a reasoning effort for models that think first
+      ...samplingParams(model, 0.3, opts.reasoningEffort),
       response_format: { type: 'json_object' },
     }),
   });
@@ -105,6 +126,7 @@ IMPORTANT:
   }
 
   const data = await response.json();
+  opts.onUsage?.(usageFrom(data, model, Date.now() - started));
   const content = data.choices[0].message.content;
   return JSON.parse(content) as AIFeedbackResponse;
 }

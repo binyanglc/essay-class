@@ -39,6 +39,8 @@ import {
 import type { Nature, Operation, Severity } from './error-taxonomy';
 import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind } from './label-rules';
 import type { PositionedChange, RuleKind } from './label-rules';
+import { samplingParams, usageFrom } from './ai-models';
+import type { AiUsage, ReasoningEffort } from './ai-models';
 
 /**
  * Default model for labelling (override with OPENAI_TAGGING_MODEL).
@@ -246,15 +248,16 @@ export interface TaggingOptions {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   model?: string;
+  /** For reasoning models only (see lib/ai-models). */
+  reasoningEffort?: ReasoningEffort;
+  /** Told the tokens and time each request used. */
+  onUsage?: (usage: AiUsage) => void;
 }
 
 /** Which model to use: option → OPENAI_TAGGING_MODEL → default. */
 export function taggingModel(opts: TaggingOptions = {}): string {
   return opts.model ?? (process.env.OPENAI_TAGGING_MODEL?.trim() || TAGGING_MODEL);
 }
-
-/** Reasoning models (o-series, GPT-5) only accept the default temperature. */
-const fixedTemperature = (model: string) => /^(o\d|gpt-5)/.test(model);
 
 async function requestLabels(
   revisions: RevisionForTagging[],
@@ -266,12 +269,14 @@ async function requestLabels(
   const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
   const doFetch = opts.fetchImpl ?? fetch;
+  const started = Date.now();
   const res = await doFetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      ...(fixedTemperature(model) ? {} : { temperature: 0 }),
+      // temperature 0, or a reasoning effort for models that think first
+      ...samplingParams(model, 0, opts.reasoningEffort),
       messages: [
         {
           role: 'system',
@@ -296,6 +301,7 @@ async function requestLabels(
     throw new Error(`OpenAI API error: ${res.status} ${body}`);
   }
   const data = await res.json();
+  opts.onUsage?.(usageFrom(data, model, Date.now() - started));
   const content = data?.choices?.[0]?.message?.content;
   const parsed = typeof content === 'string' ? JSON.parse(content) : null;
   return { labels: Array.isArray(parsed?.labels) ? (parsed.labels as RawLabel[]) : [], model };
