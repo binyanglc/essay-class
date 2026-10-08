@@ -39,7 +39,9 @@ import type { LabelFields, NewTag, TagEdits } from '@/lib/tag-edits';
 import { isActive, isUnconfirmedAi } from '@/lib/error-taxonomy';
 import type { DeleteReason } from '@/lib/error-taxonomy';
 import type { IssueGroup } from '@/lib/error-tracking';
-import { isWaitingForRelease } from '@/lib/feedback-release';
+import { isWaitingForRelease, markFeedbackViewed } from '@/lib/feedback-release';
+
+type ReleaseInfo = { feedbackId: string; releasedAt: string | null; viewedAt: string | null };
 
 export default function ProjectDetailPage() {
   const { id: classId, projectId } = useParams();
@@ -67,8 +69,8 @@ export default function ProjectDetailPage() {
   const [projLevelDraft, setProjLevelDraft] = useState<CorrectionLevel>('standard');
   const [projReleaseDraft, setProjReleaseDraft] = useState<FeedbackRelease>('immediate');
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
-  // Each submission's feedback and whether the student can see it yet (null = not released)
-  const [releaseInfo, setReleaseInfo] = useState<Record<string, { feedbackId: string; releasedAt: string | null }>>({});
+  // Each submission's feedback: can the student see it yet (null = not released), has the teacher opened it
+  const [releaseInfo, setReleaseInfo] = useState<Record<string, ReleaseInfo>>({});
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,7 @@ export default function ProjectDetailPage() {
     : [];
   const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || !isTagEditsEmpty(tagEdits);
   const waitingIds = submissions.filter((s) => releaseInfo[s.id]?.releasedAt === null).map((s) => s.id);
+  const openedWaitingIds = waitingIds.filter((id) => releaseInfo[id]?.viewedAt);
 
   useEffect(() => {
     loadData();
@@ -128,13 +131,13 @@ export default function ProjectDetailPage() {
 
   /** Each submission's feedback id and release time, for the whole project in one request. */
   async function loadReleaseInfo() {
-    const info: Record<string, { feedbackId: string; releasedAt: string | null }> = {};
+    const info: Record<string, ReleaseInfo> = {};
     const { data } = await supabase
       .from('feedback')
-      .select('id, submission_id, released_at, submissions!inner(project_id)')
+      .select('id, submission_id, released_at, teacher_viewed_at, submissions!inner(project_id)')
       .eq('submissions.project_id', projectId);
-    for (const fb of (data ?? []) as unknown as { id: string; submission_id: string; released_at: string | null }[]) {
-      info[fb.submission_id] = { feedbackId: fb.id, releasedAt: fb.released_at };
+    for (const fb of (data ?? []) as unknown as Pick<Feedback, 'id' | 'submission_id' | 'released_at' | 'teacher_viewed_at'>[]) {
+      info[fb.submission_id] = { feedbackId: fb.id, releasedAt: fb.released_at ?? null, viewedAt: fb.teacher_viewed_at ?? null };
     }
     return info;
   }
@@ -157,6 +160,9 @@ export default function ProjectDetailPage() {
       const now = prev && fresh[prev.submission_id];
       return prev && now ? { ...prev, released_at: now.releasedAt } : prev;
     });
+    // AI labels in feedback the teacher had opened are now kept: show that
+    if (selectedSub && subIds.includes(selectedSub.id)) await reloadSelectedTags(selectedSub.id);
+    loadIssues();
     setReleasing(false);
     if (!res?.ok) {
       setReleaseError("Couldn't release the feedback. Please try again.");
@@ -231,6 +237,14 @@ export default function ProjectDetailPage() {
       .single();
     if (latestSelection.current !== sub.id) return;
     setSelectedFeedback(fb);
+    // Opening it counts as reviewing it (for "Release reviewed", and so its AI labels count as kept on release)
+    if (fb && !fb.teacher_viewed_at) {
+      markFeedbackViewed(fb.id).then((at) => {
+        const viewedAt = at ?? new Date().toISOString();
+        setReleaseInfo((prev) => (prev[sub.id] ? { ...prev, [sub.id]: { ...prev[sub.id], viewedAt } } : prev));
+        setSelectedFeedback((prev) => (prev && prev.id === fb.id ? { ...prev, teacher_viewed_at: viewedAt } : prev));
+      });
+    }
 
     const { data: tags } = await supabase
       .from('error_tags')
@@ -451,10 +465,26 @@ export default function ProjectDetailPage() {
     await releaseFeedback([selectedSub.id]);
   };
 
+  /** Only the submissions the teacher has reviewed (opened). */
+  const handleReleaseReviewed = async () => {
+    const n = openedWaitingIds.length;
+    if (n === 0 || hasEdits) return;
+    if (!confirm(`Release the feedback you've reviewed to ${n} student${n === 1 ? '' : 's'}? They will see it straight away.`)) return;
+    await releaseFeedback(openedWaitingIds);
+  };
+
   const handleReleaseAll = async () => {
     const n = waitingIds.length;
     if (n === 0 || hasEdits) return;
-    if (!confirm(`Release the feedback to ${n} student${n === 1 ? '' : 's'}? They will see it straight away.`)) return;
+    const notOpened = n - openedWaitingIds.length;
+    const warning =
+      notOpened === 0
+        ? ''
+        : notOpened === n
+          ? ` You haven't reviewed ${n === 1 ? 'it' : 'any of them'}, so ${n === 1 ? 'its' : 'their'} AI labels will show as AI suggestions.`
+          : ` You haven't reviewed ${notOpened} of them, so ${notOpened === 1 ? 'its' : 'their'} AI labels will show as AI suggestions.`;
+    const who = n === 1 ? '1 student' : `all ${n} students`;
+    if (!confirm(`Release the feedback to ${who}? They will see it straight away.${warning}`)) return;
     await releaseFeedback(waitingIds);
   };
 
@@ -658,14 +688,26 @@ export default function ProjectDetailPage() {
                 {waitingIds.length} not released &mdash; {waitingIds.length === 1 ? 'that student' : 'those students'}{' '}
                 can&apos;t see the feedback yet.
               </p>
-              <button
-                onClick={handleReleaseAll}
-                disabled={releasing || hasEdits}
-                title={hasEdits ? 'Save your changes first' : 'Let every student see their feedback'}
-                className="mt-2 rounded-md bg-white px-2.5 py-1 font-medium text-amber-900 ring-1 ring-inset ring-amber-300 hover:bg-amber-100 disabled:opacity-50"
-              >
-                {releasing ? 'Releasing...' : `Release all (${waitingIds.length})`}
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {openedWaitingIds.length > 0 && openedWaitingIds.length < waitingIds.length && (
+                  <button
+                    onClick={handleReleaseReviewed}
+                    disabled={releasing || hasEdits}
+                    title={hasEdits ? 'Save your changes first' : 'Only the ones you have opened and checked'}
+                    className="rounded-md bg-amber-600 px-2.5 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    Release reviewed ({openedWaitingIds.length})
+                  </button>
+                )}
+                <button
+                  onClick={handleReleaseAll}
+                  disabled={releasing || hasEdits}
+                  title={hasEdits ? 'Save your changes first' : 'Let every student see their feedback'}
+                  className="rounded-md bg-white px-2.5 py-1 font-medium text-amber-900 ring-1 ring-inset ring-amber-300 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {releasing ? 'Releasing...' : `Release all (${waitingIds.length})`}
+                </button>
+              </div>
             </div>
           )}
           {submissions.length === 0 ? (
@@ -706,7 +748,7 @@ export default function ProjectDetailPage() {
                         </p>
                         {releaseInfo[sub.id]?.releasedAt === null && (
                           <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                            Not released
+                            {releaseInfo[sub.id]?.viewedAt ? 'Not released' : 'Not released · not reviewed'}
                           </span>
                         )}
                       </button>
@@ -760,7 +802,7 @@ export default function ProjectDetailPage() {
                     yet. Check it, then release it.
                     {visibleTags.some(isUnconfirmedAi) && (
                       <span className="block text-xs text-amber-800">
-                        AI labels you haven&apos;t kept or changed will show as AI suggestions.
+                        Releasing also keeps the AI labels you haven&apos;t changed or removed.
                       </span>
                     )}
                   </span>

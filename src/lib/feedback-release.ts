@@ -24,3 +24,27 @@ export async function submissionsInReview(supabase: SupabaseClient): Promise<Set
 export function isWaitingForRelease(feedback: Pick<Feedback, 'released_at'> | null | undefined): boolean {
   return !!feedback && feedback.released_at === null;
 }
+
+/**
+ * The teacher opened the feedback before releasing it (assignments with
+ * "after I check and release it"). Feedback students saw right away, or that
+ * was released without being opened, doesn't count.
+ */
+export function checkedBeforeRelease(
+  feedback: Pick<Feedback, 'released_at' | 'teacher_viewed_at'> | null | undefined
+): boolean {
+  if (!feedback?.released_at || !feedback.teacher_viewed_at) return false;
+  return Date.parse(feedback.teacher_viewed_at) <= Date.parse(feedback.released_at);
+}
+
+/** Teacher pages: note that the teacher opened this feedback (only the first time counts). */
+export async function markFeedbackViewed(feedbackId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/feedback/${feedbackId}/viewed`, { method: 'POST' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.viewed?.[0]?.teacher_viewed_at ?? null;
+  } catch {
+    return null;
+  }
+}

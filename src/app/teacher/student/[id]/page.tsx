@@ -10,7 +10,7 @@ import { getStudentErrorHistory } from '@/lib/error-tracking';
 import ErrorSummary from '@/components/ErrorSummary';
 import FeedbackView from '@/components/FeedbackView';
 import CompositionReview from '@/components/CompositionReview';
-import { isWaitingForRelease } from '@/lib/feedback-release';
+import { isWaitingForRelease, markFeedbackViewed } from '@/lib/feedback-release';
 
 export default function TeacherStudentDetailPage() {
   const { id: studentId } = useParams();
@@ -70,6 +70,8 @@ export default function TeacherStudentDetailPage() {
       .eq('submission_id', sub.id)
       .single();
     setSelectedFeedback(fb);
+    // Opening it counts as reviewing it (see the project page's "Release reviewed")
+    if (fb && !fb.teacher_viewed_at) markFeedbackViewed(fb.id);
 
     const { data: tags } = await supabase
       .from('error_tags')

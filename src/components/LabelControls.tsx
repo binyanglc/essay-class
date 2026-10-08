@@ -115,7 +115,9 @@ export function LabelChip({
   const text = count !== undefined ? `${style.label} ${count}` : tagLabel(tag);
   const notes: string[] = [];
   if (unchecked) notes.push('AI suggestion — not yet checked by the teacher');
-  else if (count === undefined && isConfirmed(tag)) notes.push(tag.status === 'added' ? 'Added by the teacher' : 'Checked by the teacher');
+  else if (count === undefined && isConfirmed(tag)) {
+    notes.push(tag.status === 'added' ? 'Added by the teacher' : tag.status === 'accepted' ? 'Kept by the teacher' : 'Checked by the teacher');
+  }
   if (count === undefined && tag.nature && tag.nature !== 'error') notes.push(NATURE_LABELS[tag.nature as Nature] ?? '');
   const gp = count === undefined ? getGrammarPoint(tag.grammar_point) : undefined;
   if (gp) notes.push(grammarPointTitle(gp));

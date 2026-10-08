@@ -5,6 +5,7 @@ import { Feedback, ErrorTag, ErrorType, ERROR_TYPE_LABELS, FeedbackComment, Prof
 import { linkTagsToCorrections } from '@/lib/correction-links';
 import { isActive, isUnconfirmedAi, tagLabel } from '@/lib/error-taxonomy';
 import ErrorLabels, { EXTRA_LABEL_TYPES } from './ErrorLabels';
+import { checkedBeforeRelease } from '@/lib/feedback-release';
 
 interface Props {
   feedback: Feedback;
@@ -19,6 +20,8 @@ export default function FeedbackView({ feedback, errorTags: allTags, composition
   // Labels the teacher removed are not shown
   const errorTags = allTags?.filter(isActive);
   const unchecked = (errorTags ?? []).some(isUnconfirmedAi);
+  // Edited by the teacher, or opened by the teacher before they released it
+  const reviewedAt = feedback.teacher_edited_at ?? (checkedBeforeRelease(feedback) ? feedback.released_at : null);
 
   const groupedErrors = new Map<ErrorType, ErrorTag[]>();
   if (errorTags) {
@@ -66,10 +69,10 @@ export default function FeedbackView({ feedback, errorTags: allTags, composition
 
   return (
     <div className="space-y-6">
-      {feedback.teacher_edited_at && (
+      {reviewedAt && (
         <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
           Reviewed by teacher &middot;{' '}
-          {new Date(feedback.teacher_edited_at).toLocaleDateString('en-US')}
+          {new Date(reviewedAt).toLocaleDateString('en-US')}
         </p>
       )}
       {unchecked && (

@@ -151,6 +151,8 @@ export interface Feedback {
   correction_level?: CorrectionLevel | null;
   /** When the student could first see it; null = waiting for the teacher to release it (migration v14). */
   released_at?: string | null;
+  /** When the class teacher first opened it; null = not yet (migration v14). */
+  teacher_viewed_at?: string | null;
   created_at: string;
 }
 
@@ -195,7 +197,7 @@ export interface ErrorTag {
   severity?: 'global' | 'local' | null;
   operation?: 'missing' | 'unnecessary' | 'replace' | 'order' | null;
   source?: 'ai' | 'teacher' | null;
-  status?: 'suggested' | 'confirmed' | 'modified' | 'added' | 'deleted' | null;
+  status?: 'suggested' | 'confirmed' | 'accepted' | 'modified' | 'added' | 'deleted' | null;
   delete_reason?: 'ai_wrong' | 'not_error' | 'not_now' | null;
   deleted_at?: string | null;
   /** The teacher's own wording for the label. */

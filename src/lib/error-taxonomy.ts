@@ -29,8 +29,12 @@ export type Nature = 'error' | 'infelicity' | 'variant';
 /** global = gets in the way of understanding; local = doesn't. */
 export type Severity = 'global' | 'local';
 export type Operation = 'missing' | 'unnecessary' | 'replace' | 'order';
-/** suggested = the AI's, not checked yet; confirmed / modified = checked by the teacher; added = by the teacher. */
-export type TagStatus = 'suggested' | 'confirmed' | 'modified' | 'added' | 'deleted';
+/**
+ * suggested = the AI's, not checked yet; confirmed / modified = checked by the teacher;
+ * accepted = left as it was by the teacher, who opened the feedback and then released it (migration v14);
+ * added = by the teacher.
+ */
+export type TagStatus = 'suggested' | 'confirmed' | 'accepted' | 'modified' | 'added' | 'deleted';
 export type DeleteReason = 'ai_wrong' | 'not_error' | 'not_now';
 
 /** What a label records about the exact problem. */
@@ -769,9 +773,9 @@ export function operationFor(learner: string | null | undefined, target: string 
   return 'replace';
 }
 
-/** True for labels the teacher has checked (or added). */
+/** True for labels the teacher has checked (or added, or kept when releasing the feedback). */
 export function isConfirmed(t: { status?: string | null; source?: string | null }): boolean {
-  if (t.status === 'confirmed' || t.status === 'modified' || t.status === 'added') return true;
+  if (t.status === 'confirmed' || t.status === 'accepted' || t.status === 'modified' || t.status === 'added') return true;
   // Older labels have no status: the teacher's own ones were added by hand
   return !t.status && t.source === 'teacher';
 }
