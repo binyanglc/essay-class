@@ -7,7 +7,7 @@ import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
 import { prepareHintFeedback, withMarks } from '@/lib/hints';
 import { joinWrappedLines } from '@/lib/text-layout';
-import { isCorrectionLevel } from '@/types';
+import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isMaxDrafts } from '@/types';
 import type { CorrectionLevel, FeedbackStyle } from '@/types';
 
 // Feedback and labelling are two AI calls in a row
@@ -25,10 +25,73 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { classId, projectId, title, assignmentName, imagePath, ocrText, finalText } = body;
+    const { assignmentName, imagePath, ocrText, finalText, reviseOf } = body;
+    let { classId, projectId, title } = body;
+
+    // A revised draft of one of the student's compositions (migration v17): it
+    // goes into the same class and assignment as the composition
+    let draft: { firstDraftId: string; number: number } | null = null;
+    // A composition that started as "hints only" stays that way, whatever the assignment says now
+    let keepHints = false;
+    if (typeof reviseOf === 'string' && reviseOf) {
+      const { data: prev } = await supabase
+        .from('submissions')
+        .select('id, student_id, class_id, project_id, title, first_draft_id, draft_number')
+        .eq('id', reviseOf)
+        .single();
+      if (!prev || prev.student_id !== user.id) {
+        return NextResponse.json({ error: 'Composition not found' }, { status: 404 });
+      }
+      if (!prev.project_id) {
+        return NextResponse.json({ error: 'This assignment no longer exists' }, { status: 409 });
+      }
+      classId = prev.class_id;
+      projectId = prev.project_id;
+      title = prev.title;
+      const firstDraftId: string = prev.first_draft_id ?? prev.id;
+      const prevNumber: number = prev.draft_number ?? 1;
+      const [{ data: drafts }, inReviewRes, hintsRes, { data: proj }, { data: visible }] = await Promise.all([
+        supabase.from('submissions').select('id, draft_number').or(`id.eq.${firstDraftId},first_draft_id.eq.${firstDraftId}`),
+        supabase.rpc('my_submissions_in_review'),
+        supabase.rpc('my_hint_submissions'),
+        supabase.from('projects').select('max_drafts').eq('id', prev.project_id).single(),
+        // "corrections" feedback the student can read (released)
+        supabase.from('feedback').select('id').eq('submission_id', prev.id).maybeSingle(),
+      ]);
+      const chain = ((drafts ?? []) as { id: string; draft_number: number | null }[]);
+      const latest = Math.max(1, ...chain.map((d) => d.draft_number ?? 1));
+      if (latest !== prevNumber) {
+        return NextResponse.json({ error: 'There is already a newer draft of this composition' }, { status: 409 });
+      }
+      // Revising needs feedback the student has seen (checked, or refused if it can't be checked)
+      if (inReviewRes.error || hintsRes.error || !Array.isArray(inReviewRes.data) || !Array.isArray(hintsRes.data)) {
+        return NextResponse.json({ error: "Couldn't check the feedback. Please try again." }, { status: 503 });
+      }
+      const inReview = inReviewRes.data as string[];
+      const hintSubs = hintsRes.data as string[];
+      if (inReview.includes(prev.id)) {
+        return NextResponse.json(
+          { error: "Your teacher hasn't released the feedback on this draft yet" },
+          { status: 409 }
+        );
+      }
+      if (!visible && !hintSubs.includes(prev.id)) {
+        return NextResponse.json({ error: 'There is no feedback on this draft yet' }, { status: 409 });
+      }
+      keepHints = chain.some((d) => hintSubs.includes(d.id));
+      const maxDrafts = isMaxDrafts(proj?.max_drafts) ? proj.max_drafts : DEFAULT_MAX_DRAFTS;
+      if (prevNumber + 1 > maxDrafts) {
+        return NextResponse.json({ error: 'This was your last draft for this assignment' }, { status: 409 });
+      }
+      draft = { firstDraftId, number: prevNumber + 1 };
+    }
 
     if (!finalText || !classId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+    // Every composition belongs to an assignment (so its settings, e.g. "hints only", always apply)
+    if (!projectId) {
+      return NextResponse.json({ error: 'Choose an assignment first' }, { status: 400 });
     }
 
     // A photo must be in the student's own storage folder (also enforced by RLS, migration v10)
@@ -69,7 +132,7 @@ export async function POST(request: NextRequest) {
       resolvedAssignment = project.project_name;
       if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
       holdForReview = project.feedback_release === 'after_review';
-      if (project.feedback_style === 'hints') feedbackStyle = 'hints';
+      if (project.feedback_style === 'hints' || keepHints) feedbackStyle = 'hints';
     }
 
     const { data: submission, error: subError } = await supabase
@@ -84,11 +147,16 @@ export async function POST(request: NextRequest) {
         image_path: safeImagePath,
         ocr_text: ocrText || null,
         final_text: finalText,
+        ...(draft ? { first_draft_id: draft.firstDraftId, draft_number: draft.number } : {}),
       })
       .select()
       .single();
 
     if (subError) {
+      // Two revisions sent at once: the database keeps one draft per number
+      if (draft && subError.code === '23505') {
+        return NextResponse.json({ error: 'There is already a newer draft of this composition' }, { status: 409 });
+      }
       console.error('Submission insert error:', subError);
       return NextResponse.json({ error: 'Save failed' }, { status: 500 });
     }

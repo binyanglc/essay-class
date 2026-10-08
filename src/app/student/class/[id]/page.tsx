@@ -76,7 +76,7 @@ export default function StudentClassPage() {
         ) : (
           <div className="space-y-3">
             {projects.map((p) => {
-              const mySubs = submissions.filter((s) => s.project_id === p.id);
+              const mySubs = submissions.filter((s) => s.project_id === p.id && (s.draft_number ?? 1) === 1);
               return (
                 <div
                   key={p.id}
@@ -149,6 +149,11 @@ export default function StudentClassPage() {
                     {sub.assignment_name && sub.title && (
                       <span className="text-xs text-gray-400 ml-2">
                         {sub.assignment_name}
+                      </span>
+                    )}
+                    {(sub.draft_number ?? 1) > 1 && (
+                      <span className="ml-2 px-2 py-0.5 bg-violet-50 text-violet-700 rounded text-xs">
+                        Draft {sub.draft_number}
                       </span>
                     )}
                     {inReview.has(sub.id) && (

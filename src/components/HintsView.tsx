@@ -52,7 +52,7 @@ function KindTag({ kind }: { kind: HintKind }) {
 }
 
 /** The hint's sentence with its marks (offsets are within the sentence). */
-function HintSentence({ hint }: { hint: HintItem }) {
+export function HintSentence({ hint }: { hint: HintItem }) {
   const words = hint.original;
   if (!words) {
     return <p className="text-xs text-gray-400">This sentence couldn&apos;t be found in your composition — ask your teacher.</p>;
@@ -79,7 +79,6 @@ export default function HintsView({
   text,
   view,
   preview = false,
-  resubmitHref,
   imagePath,
   label = 'Your Composition',
 }: {
@@ -89,8 +88,6 @@ export default function HintsView({
   imagePath?: string | null;
   /** The teacher's look at what the student sees: no discussion box. */
   preview?: boolean;
-  /** Where the student submits a new version. */
-  resubmitHref?: string;
   label?: string;
 }) {
   const { feedback, tags } = view;
@@ -251,17 +248,6 @@ export default function HintsView({
         </div>
       )}
 
-      {resubmitHref && ordered.length > 0 && !preview && (
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm">
-          <span className="text-gray-700">When you&apos;re ready, submit your new version.</span>
-          <a
-            href={resubmitHref}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Submit a new version
-          </a>
-        </div>
-      )}
     </div>
   );
 }

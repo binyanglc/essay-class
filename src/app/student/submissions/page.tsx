@@ -75,6 +75,11 @@ export default function SubmissionsPage() {
                   {sub.assignment_name}
                 </span>
               )}
+              {(sub.draft_number ?? 1) > 1 && (
+                <span className="inline-block mt-2 ml-2 px-2 py-0.5 bg-violet-50 text-violet-700 rounded text-xs">
+                  Draft {sub.draft_number}
+                </span>
+              )}
               {inReview.has(sub.id) && (
                 <span className="inline-block mt-2 ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
                   Teacher checking feedback

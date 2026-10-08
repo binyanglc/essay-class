@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
       projectId: projectId || undefined,
       assignmentName: filter === 'assignment' ? assignmentName : undefined,
       includeStyle,
+      // Second drafts (migration v17): count each composition once, by its first draft unless asked
+      draft: searchParams.get('draft') === 'latest' ? 'latest' : 'first',
     });
 
     return NextResponse.json(summary);

@@ -92,6 +92,23 @@ export function isFeedbackStyle(v: unknown): v is FeedbackStyle {
   return v === 'corrections' || v === 'hints';
 }
 
+/** How many drafts a student may submit for one composition (set per project, migration v17). */
+export const DRAFT_OPTIONS: { value: number; label: string; hint: string }[] = [
+  { value: 1, label: '1 — no revising', hint: 'Students submit once.' },
+  {
+    value: 2,
+    label: '2',
+    hint: 'After seeing the feedback, students can revise their composition once and submit it again.',
+  },
+  { value: 3, label: '3', hint: 'Students can revise and resubmit twice.' },
+];
+
+export const DEFAULT_MAX_DRAFTS = 2;
+
+export function isMaxDrafts(v: unknown): v is number {
+  return v === 1 || v === 2 || v === 3;
+}
+
 /** When students see the feedback (set per project by the teacher, migration v14). */
 export type FeedbackRelease = 'immediate' | 'after_review';
 
@@ -124,6 +141,8 @@ export interface Project {
   feedback_release?: FeedbackRelease;
   /** Added in migration v16; older rows default to 'corrections'. */
   feedback_style?: FeedbackStyle;
+  /** How many drafts a student may submit for one composition: 1–3 (migration v17; default 2). */
+  max_drafts?: number;
   created_at: string;
 }
 
@@ -148,6 +167,10 @@ export interface Submission {
   image_path?: string | null;
   ocr_text: string | null;
   final_text: string;
+  /** Later drafts point at the composition's first draft (migration v17); null for a first draft. */
+  first_draft_id?: string | null;
+  /** 1 for a first draft (migration v17). */
+  draft_number?: number;
   created_at: string;
   feedback?: Feedback;
   profiles?: Profile;

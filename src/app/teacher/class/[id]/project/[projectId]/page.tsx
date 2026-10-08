@@ -18,6 +18,7 @@ import {
   FEEDBACK_STYLES,
   FeedbackRelease,
   FeedbackStyle,
+  DEFAULT_MAX_DRAFTS,
 } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
@@ -28,6 +29,9 @@ import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
 import HintsView from '@/components/HintsView';
 import { fetchHintView } from '@/lib/hints';
 import type { HintView } from '@/lib/hints';
+import DraftsSelect from '@/components/DraftsSelect';
+import DraftProgress, { DraftChanges } from '@/components/DraftProgress';
+import { draftDiff, draftNumber, draftProgress, groupDrafts, itemsFromRevisions } from '@/lib/drafts';
 import ErrorLabels, { ExtraLabelSections } from '@/components/ErrorLabels';
 import type { LabelSuggestion } from '@/components/RevisionInspector';
 import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
@@ -75,6 +79,12 @@ export default function ProjectDetailPage() {
   const [projLevelDraft, setProjLevelDraft] = useState<CorrectionLevel>('standard');
   const [projReleaseDraft, setProjReleaseDraft] = useState<FeedbackRelease>('immediate');
   const [projStyleDraft, setProjStyleDraft] = useState<FeedbackStyle>('corrections');
+  const [projDraftsDraft, setProjDraftsDraft] = useState(DEFAULT_MAX_DRAFTS);
+  // The draft before the open one (migration v17): its text and the corrections it had
+  const [prevDraft, setPrevDraft] = useState<{ sub: Submission; revisions: SentenceRevision[] } | null>(null);
+  const [showDraftChanges, setShowDraftChanges] = useState(false);
+  // Common Issues counts each composition once: by its first draft, or its latest
+  const [issuesDraft, setIssuesDraft] = useState<'first' | 'latest'>('first');
   // "Hints only": what the student sees (the saved version), shown instead of the editor
   const [studentPreview, setStudentPreview] = useState<HintView | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -96,6 +106,26 @@ export default function ProjectDetailPage() {
   const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || !isTagEditsEmpty(tagEdits);
   const waitingIds = submissions.filter((s) => releaseInfo[s.id]?.releasedAt === null).map((s) => s.id);
   const openedWaitingIds = waitingIds.filter((id) => releaseInfo[id]?.viewedAt);
+  // One entry per composition, its drafts in order (newest compositions first)
+  const compositions = groupDrafts(submissions);
+  const selectedGroup = selectedSub ? compositions.find((g) => g.some((d) => d.id === selectedSub.id)) ?? [selectedSub] : [];
+  const hasLaterDrafts = submissions.some((s) => draftNumber(s) > 1);
+  // How the previous draft's problems fared (follows the teacher's unsaved edits)
+  const progress =
+    selectedSub && prevDraft && currentRevisions
+      ? (() => {
+          const prevItems = itemsFromRevisions(prevDraft.sub.final_text, prevDraft.revisions);
+          return {
+            problems: prevItems.map((p) => ({ id: p.id, original: p.original })),
+            statuses: draftProgress(
+              prevDraft.sub.final_text,
+              prevItems,
+              selectedSub.final_text,
+              itemsFromRevisions(selectedSub.final_text, currentRevisions)
+            ),
+          };
+        })()
+      : null;
 
   useEffect(() => {
     loadData();
@@ -105,7 +135,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!loading) loadIssues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeStyle]);
+  }, [includeStyle, issuesDraft]);
 
   async function loadData() {
     const { data: proj } = await supabase
@@ -185,7 +215,9 @@ export default function ProjectDetailPage() {
   async function loadIssues() {
     try {
       const res = await fetch(
-        `/api/teacher/issues?classId=${classId}&projectId=${projectId}${includeStyle ? '&style=1' : ''}`
+        `/api/teacher/issues?classId=${classId}&projectId=${projectId}${includeStyle ? '&style=1' : ''}${
+          issuesDraft === 'latest' ? '&draft=latest' : ''
+        }`
       );
       if (!res.ok) return;
       const issueData = await res.json();
@@ -240,6 +272,28 @@ export default function ProjectDetailPage() {
     setTagEdits(null);
     setSaveError(null);
     setStudentPreview(null);
+    setPrevDraft(null);
+    setShowDraftChanges(false);
+
+    // A later draft: load the one before, to compare
+    const n = draftNumber(sub);
+    if (n > 1) {
+      const prev = submissions.find(
+        (d) => (d.first_draft_id ?? d.id) === sub.first_draft_id && draftNumber(d) === n - 1
+      );
+      if (prev) {
+        supabase
+          .from('feedback')
+          .select('sentence_revisions')
+          .eq('submission_id', prev.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (latestSelection.current === sub.id) {
+              setPrevDraft({ sub: prev, revisions: (data?.sentence_revisions ?? []) as SentenceRevision[] });
+            }
+          });
+      }
+    }
 
     const { data: fb } = await supabase
       .from('feedback')
@@ -538,6 +592,7 @@ export default function ProjectDetailPage() {
         correctionLevel: projLevelDraft,
         feedbackRelease: projReleaseDraft,
         feedbackStyle: projStyleDraft,
+        maxDrafts: projDraftsDraft,
       }),
     });
     if (res.ok) {
@@ -553,11 +608,12 @@ export default function ProjectDetailPage() {
     if (res.ok) router.push(`/teacher/class/${classId}`);
   };
 
-  const handleDeleteSubmission = async (subId: string) => {
-    if (!confirm('Delete this submission and its feedback?')) return;
+  /** Deletes a composition: its first draft takes the later drafts with it. */
+  const handleDeleteSubmission = async (subId: string, drafts = 1) => {
+    if (!confirm(drafts > 1 ? `Delete this submission (all ${drafts} drafts) and its feedback?` : 'Delete this submission and its feedback?')) return;
     const res = await fetch(`/api/submissions/${subId}`, { method: 'DELETE' });
     if (res.ok) {
-      if (selectedSub?.id === subId) {
+      if (selectedSub && (selectedSub.id === subId || selectedSub.first_draft_id === subId)) {
         setSelectedSub(null);
         setSelectedFeedback(null);
         setSelectedTags([]);
@@ -631,6 +687,7 @@ export default function ProjectDetailPage() {
               onChange={setProjReleaseDraft}
               existingProject
             />
+            <DraftsSelect id="project-drafts" value={projDraftsDraft} onChange={setProjDraftsDraft} existingProject />
             <div className="flex gap-2">
               <button
                 onClick={handleEditProject}
@@ -660,6 +717,7 @@ export default function ProjectDetailPage() {
                   setProjLevelDraft(project.correction_level ?? 'standard');
                   setProjReleaseDraft(project.feedback_release ?? 'immediate');
                   setProjStyleDraft(project.feedback_style ?? 'corrections');
+                  setProjDraftsDraft(project.max_drafts ?? DEFAULT_MAX_DRAFTS);
                 }}
                 className="text-xs text-gray-400 hover:text-blue-600"
                 title="Edit project"
@@ -681,6 +739,7 @@ export default function ProjectDetailPage() {
               {CORRECTION_LEVELS.find((l) => l.value === (project.correction_level ?? 'standard'))?.label}
               {' '}&middot; Students see the feedback:{' '}
               {project.feedback_release === 'after_review' ? 'after you release it' : 'right after they submit'}
+              {' '}&middot; Drafts: {project.max_drafts ?? DEFAULT_MAX_DRAFTS}
             </p>
             <button
               onClick={handleDeleteProject}
@@ -702,6 +761,21 @@ export default function ProjectDetailPage() {
         >
           {showIssues ? 'Hide' : 'Show'} Common Issues ({issueCount} submissions)
         </button>
+        {showIssues && hasLaterDrafts && (
+          <span className="ml-3 inline-flex rounded-md bg-gray-200/70 p-0.5 text-xs" role="tablist" aria-label="Which drafts count">
+            {(['first', 'latest'] as const).map((d) => (
+              <button
+                key={d}
+                role="tab"
+                aria-selected={issuesDraft === d}
+                onClick={() => setIssuesDraft(d)}
+                className={`rounded px-2.5 py-1 ${issuesDraft === d ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-600'}`}
+              >
+                {d === 'first' ? 'First drafts' : 'Latest drafts'}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
 
       {showIssues && (
@@ -721,7 +795,7 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 items-start">
         <section className="bg-white rounded-xl border border-gray-200 p-4 lg:sticky lg:top-20">
           <h2 className="font-semibold mb-3">
-            Submissions ({submissions.length})
+            Submissions ({compositions.length})
           </h2>
           {waitingIds.length > 0 && (
             <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -755,46 +829,48 @@ export default function ProjectDetailPage() {
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
             <div className="space-y-2 max-h-[600px] lg:max-h-[calc(100vh-11rem)] overflow-y-auto">
-              {submissions.map((sub) => {
+              {compositions.map((group) => {
+                const sub = group[group.length - 1];
                 const profile = sub.profiles as unknown as Profile;
+                const selected = group.some((d) => d.id === selectedSub?.id);
+                const comments = group.reduce((n, d) => n + (commentCounts[d.id] ?? 0), 0);
+                const waiting = group.filter((d) => releaseInfo[d.id]?.releasedAt === null);
                 return (
                   <div
-                    key={sub.id}
+                    key={group[0].id}
                     className={`p-3 rounded-lg border transition-colors ${
-                      selectedSub?.id === sub.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-100 hover:bg-gray-50'
+                      selected ? 'border-blue-500 bg-blue-50' : 'border-gray-100 hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex justify-between items-start">
-                      <button
-                        onClick={() => handleSelectSubmission(sub)}
-                        className="flex-1 text-left min-w-0"
-                      >
+                      <button onClick={() => handleSelectSubmission(sub)} className="flex-1 text-left min-w-0">
                         <div className="flex justify-between">
                           <span className="text-sm font-medium">
                             {profile?.name || 'Unknown'}
-                            {commentCounts[sub.id] > 0 && (
+                            {comments > 0 && (
                               <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
-                                {commentCounts[sub.id]}
+                                {comments}
                               </span>
                             )}
                           </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date(sub.created_at).toLocaleDateString('en-US')}
-                          </span>
+                          <span className="text-xs text-gray-400">{new Date(sub.created_at).toLocaleDateString('en-US')}</span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-1">
-                          {sub.final_text.substring(0, 60)}
-                        </p>
-                        {releaseInfo[sub.id]?.releasedAt === null && (
-                          <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                            {releaseInfo[sub.id]?.viewedAt ? 'Not released' : 'Not released · not reviewed'}
-                          </span>
-                        )}
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-1">{sub.final_text.substring(0, 60)}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {group.length > 1 && (
+                            <span className="inline-block rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                              Draft {draftNumber(sub)}
+                            </span>
+                          )}
+                          {waiting.length > 0 && (
+                            <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                              {waiting.every((d) => releaseInfo[d.id]?.viewedAt) ? 'Not released' : 'Not released · not reviewed'}
+                            </span>
+                          )}
+                        </div>
                       </button>
                       <button
-                        onClick={() => handleDeleteSubmission(sub.id)}
+                        onClick={() => handleDeleteSubmission(group[0].id, group.length)}
                         className="text-xs text-red-300 hover:text-red-600 ml-2 flex-shrink-0 mt-0.5"
                         title="Delete submission"
                       >
@@ -825,6 +901,22 @@ export default function ProjectDetailPage() {
                   </button>
                 )}
               </div>
+              {selectedGroup.length > 1 && (
+                <nav aria-label="Drafts" className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+                  {selectedGroup.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => handleSelectSubmission(d)}
+                      className={`rounded-full px-2.5 py-1 ${
+                        d.id === selectedSub.id ? 'bg-blue-600 font-medium text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Draft {draftNumber(d)}
+                      {releaseInfo[d.id]?.releasedAt === null ? ' · not released' : ''}
+                    </button>
+                  ))}
+                </nav>
+              )}
               {saveError && (
                 <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                   {saveError}
@@ -861,6 +953,26 @@ export default function ProjectDetailPage() {
                   Released to the student &middot;{' '}
                   {new Date(selectedFeedback.released_at).toLocaleDateString('en-US')}
                 </p>
+              )}
+
+              {prevDraft && (
+                <div className="mb-4 space-y-3">
+                  {progress && (
+                    <DraftProgress
+                      problems={progress.problems}
+                      statuses={progress.statuses}
+                      prevLabel={`draft ${draftNumber(prevDraft.sub)}`}
+                      forTeacher
+                    />
+                  )}
+                  <button
+                    onClick={() => setShowDraftChanges((v) => !v)}
+                    className="text-xs font-medium text-blue-600 hover:underline"
+                  >
+                    {showDraftChanges ? 'Hide' : 'Show'} what the student changed from draft {draftNumber(prevDraft.sub)}
+                  </button>
+                  {showDraftChanges && <DraftChanges ops={draftDiff(prevDraft.sub.final_text, selectedSub.final_text)} />}
+                </div>
               )}
 
               {selectedFeedback?.feedback_style === 'hints' && (

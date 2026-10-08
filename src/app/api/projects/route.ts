@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { isCorrectionLevel, isFeedbackRelease, isFeedbackStyle } from '@/types';
+import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
-    const { classId, projectName, description, dueDate, correctionLevel, feedbackRelease, feedbackStyle } =
+    const { classId, projectName, description, dueDate, correctionLevel, feedbackRelease, feedbackStyle, maxDrafts } =
       await request.json();
 
     if (!classId || !projectName?.trim()) {
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         correction_level: isCorrectionLevel(correctionLevel) ? correctionLevel : 'standard',
         feedback_release: isFeedbackRelease(feedbackRelease) ? feedbackRelease : 'immediate',
         feedback_style: isFeedbackStyle(feedbackStyle) ? feedbackStyle : 'corrections',
+        max_drafts: isMaxDrafts(maxDrafts) ? maxDrafts : DEFAULT_MAX_DRAFTS,
       })
       .select()
       .single();

@@ -52,7 +52,8 @@ export default function StudentDashboard() {
           .from('submissions')
           .select('id', { count: 'exact', head: true })
           .eq('student_id', user.id)
-          .eq('class_id', c.id);
+          .eq('class_id', c.id)
+          .eq('draft_number', 1);
         counts[c.id] = count || 0;
       }
       setSubCounts(counts);
@@ -172,6 +173,11 @@ export default function StudentDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">
                     {sub.title || sub.assignment_name || 'Untitled'}
+                    {(sub.draft_number ?? 1) > 1 && (
+                      <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                        Draft {sub.draft_number}
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs text-gray-400">
                     {new Date(sub.created_at).toLocaleDateString('en-US')}

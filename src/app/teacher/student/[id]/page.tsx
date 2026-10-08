@@ -126,6 +126,11 @@ export default function TeacherStudentDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-sm font-medium">
                       {sub.title || sub.assignment_name || 'Untitled'}
+                      {(sub.draft_number ?? 1) > 1 && (
+                        <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                          Draft {sub.draft_number}
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-gray-400">
                       {new Date(sub.created_at).toLocaleDateString('en-US')}

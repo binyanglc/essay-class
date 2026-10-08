@@ -195,7 +195,7 @@ export function inDomainOrder(groups: IssueGroup[]): IssueGroup[] {
 }
 
 async function studentTags(supabase: SupabaseClient, studentId: string): Promise<ErrorTag[]> {
-  const [{ data }, hintTags] = await Promise.all([
+  const [{ data }, hintTags, laterDrafts] = await Promise.all([
     supabase
       .from('error_tags')
       .select('*')
@@ -203,17 +203,31 @@ async function studentTags(supabase: SupabaseClient, studentId: string): Promise
       .order('created_at', { ascending: false })
       .limit(500),
     ownHintTags(supabase, studentId),
+    laterDraftIds(supabase, studentId),
   ]);
-  const rows = (data ?? []) as ErrorTag[];
+  // A problem counts once per composition: in the first draft (later drafts repeat what wasn't fixed yet)
+  const firstDrafts = (t: ErrorTag) => !laterDrafts.has(t.submission_id);
+  const rows = ((data ?? []) as ErrorTag[]).filter(firstDrafts);
   // Students can't read labels from "hints only" feedback directly; they get them without the answers
   const seen = new Set(rows.map((t) => t.id));
-  const extra = hintTags.filter((t) => !seen.has(t.id));
+  const extra = hintTags.filter((t) => !seen.has(t.id) && firstDrafts(t));
   if (extra.length === 0) return rows.filter(isActive);
   // Newest first; labels saved at the same moment keep their order (stable sort)
   return [...rows, ...extra]
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
     .slice(0, 500)
     .filter(isActive);
+}
+
+/** The student's second and third drafts (migration v17); empty if that can't be checked. */
+async function laterDraftIds(supabase: SupabaseClient, studentId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('id, draft_number')
+    .eq('student_id', studentId)
+    .gt('draft_number', 1);
+  if (error || !data) return new Set();
+  return new Set((data as { id: string }[]).map((d) => d.id));
 }
 
 /**
@@ -297,15 +311,26 @@ export function categorizeByEssays(essays: number): string {
 export async function getClassErrorSummary(
   supabase: SupabaseClient,
   classId: string,
-  options?: { since?: string; projectId?: string; assignmentName?: string; includeStyle?: boolean }
+  options?: {
+    since?: string;
+    projectId?: string;
+    assignmentName?: string;
+    includeStyle?: boolean;
+    /** Which draft of each composition counts (migration v17): the first (default) or the latest. */
+    draft?: 'first' | 'latest';
+  }
 ) {
-  const { data: submissions } = await (() => {
-    let q = supabase.from('submissions').select('id').eq('class_id', classId);
+  const { data: allSubs } = await (() => {
+    let q = supabase.from('submissions').select('id, first_draft_id, draft_number').eq('class_id', classId);
     if (options?.since) q = q.gte('created_at', options.since);
     if (options?.projectId) q = q.eq('project_id', options.projectId);
     if (options?.assignmentName) q = q.eq('assignment_name', options.assignmentName);
     return q;
   })();
+  const submissions = pickDrafts(
+    (allSubs ?? []) as { id: string; first_draft_id?: string | null; draft_number?: number | null }[],
+    options?.draft ?? 'first'
+  );
 
   if (!submissions || submissions.length === 0) {
     return { errorTypes: [] as IssueGroup[], totalSubmissions: 0, styleCount: 0 };
@@ -324,4 +349,19 @@ export async function getClassErrorSummary(
     includeStyle: options?.includeStyle,
   });
   return { errorTypes: groups, totalSubmissions: submissions.length, styleCount };
+}
+
+/** One submission per composition: its first draft, or its latest draft. */
+export function pickDrafts<T extends { id: string; first_draft_id?: string | null; draft_number?: number | null }>(
+  subs: T[],
+  which: 'first' | 'latest'
+): T[] {
+  if (which === 'first') return subs.filter((s) => (s.draft_number ?? 1) === 1);
+  const latest = new Map<string, T>();
+  for (const s of subs) {
+    const key = s.first_draft_id ?? s.id;
+    const cur = latest.get(key);
+    if (!cur || (s.draft_number ?? 1) > (cur.draft_number ?? 1)) latest.set(key, s);
+  }
+  return [...latest.values()];
 }

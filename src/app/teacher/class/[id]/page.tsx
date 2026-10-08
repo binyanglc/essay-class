@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease, FeedbackStyle } from '@/types';
+import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease, FeedbackStyle, DEFAULT_MAX_DRAFTS } from '@/types';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
 import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
+import DraftsSelect from '@/components/DraftsSelect';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -25,6 +26,7 @@ export default function ClassDetailPage() {
   const [newLevel, setNewLevel] = useState<CorrectionLevel>('standard');
   const [newRelease, setNewRelease] = useState<FeedbackRelease>('immediate');
   const [newStyle, setNewStyle] = useState<FeedbackStyle>('corrections');
+  const [newDrafts, setNewDrafts] = useState(DEFAULT_MAX_DRAFTS);
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -69,7 +71,8 @@ export default function ClassDetailPage() {
         const { count } = await supabase
           .from('submissions')
           .select('id', { count: 'exact', head: true })
-          .eq('project_id', p.id);
+          .eq('project_id', p.id)
+          .eq('draft_number', 1);
         counts[p.id] = count || 0;
       }
       setProjectCounts(counts);
@@ -107,6 +110,7 @@ export default function ClassDetailPage() {
         correctionLevel: newLevel,
         feedbackRelease: newRelease,
         feedbackStyle: newStyle,
+        maxDrafts: newDrafts,
       }),
     });
     if (res.ok) {
@@ -116,6 +120,7 @@ export default function ClassDetailPage() {
       setNewLevel('standard');
       setNewRelease('immediate');
       setNewStyle('corrections');
+      setNewDrafts(DEFAULT_MAX_DRAFTS);
       setShowForm(false);
       loadAll();
     }
@@ -286,6 +291,7 @@ export default function ClassDetailPage() {
             <FeedbackStyleSelect id="new-project-feedback-style" value={newStyle} onChange={setNewStyle} />
             <CorrectionLevelSelect id="new-project-correction-level" value={newLevel} onChange={setNewLevel} />
             <FeedbackReleaseSelect id="new-project-feedback-release" value={newRelease} onChange={setNewRelease} />
+            <DraftsSelect id="new-project-drafts" value={newDrafts} onChange={setNewDrafts} />
             <div className="flex gap-2">
               <button
                 onClick={handleCreateProject}
@@ -295,7 +301,7 @@ export default function ClassDetailPage() {
                 {creating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); setNewRelease('immediate'); setNewStyle('corrections'); }}
+                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); setNewRelease('immediate'); setNewStyle('corrections'); setNewDrafts(DEFAULT_MAX_DRAFTS); }}
                 className="text-sm text-gray-500 px-4 py-2"
               >
                 Cancel
