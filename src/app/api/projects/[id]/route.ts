@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { isCorrectionLevel } from '@/types';
+import { isCorrectionLevel, isFeedbackRelease } from '@/types';
 
 export async function PUT(
   request: NextRequest,
@@ -35,6 +35,7 @@ export async function PUT(
     if ('description' in body) updates.description = body.description?.trim() ?? '';
     if ('dueDate' in body) updates.due_date = body.dueDate || null;
     if (isCorrectionLevel(body.correctionLevel)) updates.correction_level = body.correctionLevel;
+    if (isFeedbackRelease(body.feedbackRelease)) updates.feedback_release = body.feedbackRelease;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

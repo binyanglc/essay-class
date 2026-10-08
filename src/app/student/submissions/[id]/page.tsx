@@ -8,12 +8,15 @@ import { Submission, Feedback, ErrorTag } from '@/types';
 import FeedbackView from '@/components/FeedbackView';
 import { isActive } from '@/lib/error-taxonomy';
 import CompositionReview from '@/components/CompositionReview';
+import { submissionsInReview } from '@/lib/feedback-release';
 
 export default function SubmissionDetailPage() {
   const { id } = useParams();
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [errorTags, setErrorTags] = useState<ErrorTag[]>([]);
+  // The teacher checks the feedback first and hasn't released it yet
+  const [inReview, setInReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -33,6 +36,7 @@ export default function SubmissionDetailPage() {
           .eq('submission_id', sub.id)
           .single();
         setFeedback(fb);
+        if (!fb) setInReview((await submissionsInReview(supabase)).has(sub.id));
 
         const { data: tags } = await supabase
           .from('error_tags')
@@ -98,6 +102,13 @@ export default function SubmissionDetailPage() {
             compositionText={submission.final_text}
             revisions={feedback.sentence_revisions}
           />
+        </div>
+      ) : inReview ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+          <p className="font-medium text-blue-900">Your teacher is checking the feedback</p>
+          <p className="mt-1 text-sm text-blue-800">
+            You&apos;ll see the feedback on this composition here as soon as your teacher releases it.
+          </p>
         </div>
       ) : (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">

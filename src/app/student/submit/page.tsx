@@ -114,6 +114,11 @@ function SubmitContent() {
               <p className="text-sm text-gray-700">{project.description}</p>
             </div>
           )}
+          {project.feedback_release === 'after_review' && (
+            <p className="mt-2 text-xs text-gray-500">
+              Your teacher checks the feedback before you see it.
+            </p>
+          )}
         </div>
       )}
 

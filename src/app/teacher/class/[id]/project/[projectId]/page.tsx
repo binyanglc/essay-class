@@ -15,11 +15,13 @@ import {
   SentenceRevision,
   CorrectionLevel,
   CORRECTION_LEVELS,
+  FeedbackRelease,
 } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
 import CompositionReview from '@/components/CompositionReview';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
+import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
 import ErrorLabels, { ExtraLabelSections } from '@/components/ErrorLabels';
 import type { LabelSuggestion } from '@/components/RevisionInspector';
 import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
@@ -37,6 +39,7 @@ import type { LabelFields, NewTag, TagEdits } from '@/lib/tag-edits';
 import { isActive, isUnconfirmedAi } from '@/lib/error-taxonomy';
 import type { DeleteReason } from '@/lib/error-taxonomy';
 import type { IssueGroup } from '@/lib/error-tracking';
+import { isWaitingForRelease } from '@/lib/feedback-release';
 
 export default function ProjectDetailPage() {
   const { id: classId, projectId } = useParams();
@@ -62,7 +65,12 @@ export default function ProjectDetailPage() {
   const [projDescDraft, setProjDescDraft] = useState('');
   const [projDueDraft, setProjDueDraft] = useState('');
   const [projLevelDraft, setProjLevelDraft] = useState<CorrectionLevel>('standard');
+  const [projReleaseDraft, setProjReleaseDraft] = useState<FeedbackRelease>('immediate');
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  // Each submission's feedback and whether the student can see it yet (null = not released)
+  const [releaseInfo, setReleaseInfo] = useState<Record<string, { feedbackId: string; releasedAt: string | null }>>({});
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -74,6 +82,7 @@ export default function ProjectDetailPage() {
     ? applyTagEdits(selectedTags, tagEdits, { submission_id: selectedSub.id, student_id: selectedSub.student_id })
     : [];
   const hasEdits = Object.keys(editing).length > 0 || editingRevisions !== null || !isTagEditsEmpty(tagEdits);
+  const waitingIds = submissions.filter((s) => releaseInfo[s.id]?.releasedAt === null).map((s) => s.id);
 
   useEffect(() => {
     loadData();
@@ -102,27 +111,59 @@ export default function ProjectDetailPage() {
 
     await Promise.all([loadIssues(), loadLabelSuggestions()]);
 
-    if (subs && subs.length > 0) {
-      const counts: Record<string, number> = {};
-      for (const sub of subs) {
-        const { data: fb } = await supabase
-          .from('feedback')
-          .select('id')
-          .eq('submission_id', sub.id)
-          .single();
-        if (fb) {
-          const { count } = await supabase
-            .from('feedback_comments')
-            .select('id', { count: 'exact', head: true })
-            .eq('feedback_id', fb.id);
-          if (count && count > 0) counts[sub.id] = count;
-        }
-      }
-      setCommentCounts(counts);
+    const info = await loadReleaseInfo();
+    setReleaseInfo(info);
+    const counts: Record<string, number> = {};
+    for (const [subId, fb] of Object.entries(info)) {
+      const { count } = await supabase
+        .from('feedback_comments')
+        .select('id', { count: 'exact', head: true })
+        .eq('feedback_id', fb.feedbackId);
+      if (count && count > 0) counts[subId] = count;
     }
+    setCommentCounts(counts);
 
     setLoading(false);
   }
+
+  /** Each submission's feedback id and release time, for the whole project in one request. */
+  async function loadReleaseInfo() {
+    const info: Record<string, { feedbackId: string; releasedAt: string | null }> = {};
+    const { data } = await supabase
+      .from('feedback')
+      .select('id, submission_id, released_at, submissions!inner(project_id)')
+      .eq('submissions.project_id', projectId);
+    for (const fb of (data ?? []) as unknown as { id: string; submission_id: string; released_at: string | null }[]) {
+      info[fb.submission_id] = { feedbackId: fb.id, releasedAt: fb.released_at };
+    }
+    return info;
+  }
+
+  /** Lets the students see their feedback. Returns whether it worked. */
+  const releaseFeedback = async (subIds: string[]): Promise<boolean> => {
+    const feedbackIds = subIds.map((id) => releaseInfo[id]?.feedbackId).filter((id): id is string => !!id);
+    if (feedbackIds.length === 0) return false;
+    setReleasing(true);
+    setReleaseError(null);
+    const res = await fetch('/api/feedback/release', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedbackIds }),
+    }).catch(() => null);
+    // Read back what is saved now (some may have been released elsewhere meanwhile)
+    const fresh = await loadReleaseInfo();
+    setReleaseInfo(fresh);
+    setSelectedFeedback((prev) => {
+      const now = prev && fresh[prev.submission_id];
+      return prev && now ? { ...prev, released_at: now.releasedAt } : prev;
+    });
+    setReleasing(false);
+    if (!res?.ok) {
+      setReleaseError("Couldn't release the feedback. Please try again.");
+      return false;
+    }
+    return true;
+  };
 
   /** Common Issues is worked out from the saved labels each time it loads — nothing to regenerate. */
   async function loadIssues() {
@@ -350,12 +391,13 @@ export default function ProjectDetailPage() {
     setEditing((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSaveEdits = async () => {
-    if (!selectedFeedback || !selectedSub) return;
+  /** Saves the teacher's changes; returns whether everything was saved. */
+  const handleSaveEdits = async (): Promise<boolean> => {
+    if (!selectedFeedback || !selectedSub) return false;
     const hasTextEdits = Object.keys(editing).length > 0;
     const hasRevisionEdits = editingRevisions !== null;
     const labels = isTagEditsEmpty(tagEdits) ? null : tagEdits;
-    if (!hasTextEdits && !hasRevisionEdits && !labels) return;
+    if (!hasTextEdits && !hasRevisionEdits && !labels) return true;
 
     const subId = selectedSub.id;
     setSaving(true);
@@ -374,7 +416,7 @@ export default function ProjectDetailPage() {
       if (!res?.ok) {
         setSaveError('Could not save your changes. Please try again.');
         setSaving(false);
-        return;
+        return false;
       }
       const updated = await res.json();
       if (latestSelection.current === subId) {
@@ -384,10 +426,11 @@ export default function ProjectDetailPage() {
       }
     }
 
+    let allSaved = true;
     if (labels) {
       const failed = await saveLabelEdits(subId, labels);
+      allSaved = isTagEditsEmpty(failed);
       if (latestSelection.current === subId) {
-        const allSaved = isTagEditsEmpty(failed);
         setTagEdits(allSaved ? null : failed);
         if (!allSaved) setSaveError("Some label changes couldn't be saved. Click Save to try again.");
       }
@@ -398,6 +441,21 @@ export default function ProjectDetailPage() {
     // Common Issues counts the saved labels: refresh it now
     loadIssues();
     setSaving(false);
+    return allSaved;
+  };
+
+  /** Release the open submission's feedback; unsaved changes are saved first. */
+  const handleReleaseSelected = async () => {
+    if (!selectedSub) return;
+    if (hasEdits && !(await handleSaveEdits())) return;
+    await releaseFeedback([selectedSub.id]);
+  };
+
+  const handleReleaseAll = async () => {
+    const n = waitingIds.length;
+    if (n === 0 || hasEdits) return;
+    if (!confirm(`Release the feedback to ${n} student${n === 1 ? '' : 's'}? They will see it straight away.`)) return;
+    await releaseFeedback(waitingIds);
   };
 
   // Examples edited in Common Issues are labels too
@@ -416,6 +474,7 @@ export default function ProjectDetailPage() {
         description: projDescDraft,
         dueDate: projDueDraft || null,
         correctionLevel: projLevelDraft,
+        feedbackRelease: projReleaseDraft,
       }),
     });
     if (res.ok) {
@@ -497,6 +556,12 @@ export default function ProjectDetailPage() {
               onChange={setProjLevelDraft}
               existingProject
             />
+            <FeedbackReleaseSelect
+              id="project-feedback-release"
+              value={projReleaseDraft}
+              onChange={setProjReleaseDraft}
+              existingProject
+            />
             <div className="flex gap-2">
               <button
                 onClick={handleEditProject}
@@ -524,6 +589,7 @@ export default function ProjectDetailPage() {
                   setProjDescDraft(project.description || '');
                   setProjDueDraft(project.due_date ? new Date(project.due_date).toISOString().slice(0, 16) : '');
                   setProjLevelDraft(project.correction_level ?? 'standard');
+                  setProjReleaseDraft(project.feedback_release ?? 'immediate');
                 }}
                 className="text-xs text-gray-400 hover:text-blue-600"
                 title="Edit project"
@@ -542,6 +608,8 @@ export default function ProjectDetailPage() {
             <p className="text-xs mt-1 text-gray-400">
               AI corrections:{' '}
               {CORRECTION_LEVELS.find((l) => l.value === (project.correction_level ?? 'standard'))?.label}
+              {' '}&middot; Students see the feedback:{' '}
+              {project.feedback_release === 'after_review' ? 'after you release it' : 'right after they submit'}
             </p>
             <button
               onClick={handleDeleteProject}
@@ -584,6 +652,22 @@ export default function ProjectDetailPage() {
           <h2 className="font-semibold mb-3">
             Submissions ({submissions.length})
           </h2>
+          {waitingIds.length > 0 && (
+            <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p>
+                {waitingIds.length} not released &mdash; {waitingIds.length === 1 ? 'that student' : 'those students'}{' '}
+                can&apos;t see the feedback yet.
+              </p>
+              <button
+                onClick={handleReleaseAll}
+                disabled={releasing || hasEdits}
+                title={hasEdits ? 'Save your changes first' : 'Let every student see their feedback'}
+                className="mt-2 rounded-md bg-white px-2.5 py-1 font-medium text-amber-900 ring-1 ring-inset ring-amber-300 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {releasing ? 'Releasing...' : `Release all (${waitingIds.length})`}
+              </button>
+            </div>
+          )}
           {submissions.length === 0 ? (
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
@@ -620,6 +704,11 @@ export default function ProjectDetailPage() {
                         <p className="text-xs text-gray-500 mt-1 line-clamp-1">
                           {sub.final_text.substring(0, 60)}
                         </p>
+                        {releaseInfo[sub.id]?.releasedAt === null && (
+                          <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            Not released
+                          </span>
+                        )}
                       </button>
                       <button
                         onClick={() => handleDeleteSubmission(sub.id)}
@@ -656,6 +745,38 @@ export default function ProjectDetailPage() {
               {saveError && (
                 <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                   {saveError}
+                </p>
+              )}
+              {releaseError && (
+                <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {releaseError}
+                </p>
+              )}
+              {isWaitingForRelease(selectedFeedback) && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                  <span>
+                    <span className="font-semibold">Not released.</span>{' '}
+                    The student can&apos;t see this feedback
+                    yet. Check it, then release it.
+                    {visibleTags.some(isUnconfirmedAi) && (
+                      <span className="block text-xs text-amber-800">
+                        AI labels you haven&apos;t kept or changed will show as AI suggestions.
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={handleReleaseSelected}
+                    disabled={releasing || saving}
+                    className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {releasing ? 'Releasing...' : hasEdits ? 'Save & release' : 'Release to student'}
+                  </button>
+                </div>
+              )}
+              {selectedFeedback?.released_at && project.feedback_release === 'after_review' && (
+                <p className="mb-3 text-xs text-green-700">
+                  Released to the student &middot;{' '}
+                  {new Date(selectedFeedback.released_at).toLocaleDateString('en-US')}
                 </p>
               )}
 

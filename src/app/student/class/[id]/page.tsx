@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Class, Project, Submission } from '@/types';
+import { submissionsInReview } from '@/lib/feedback-release';
 
 export default function StudentClassPage() {
   const { id: classId } = useParams();
   const [cls, setCls] = useState<Class | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [inReview, setInReview] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -39,6 +41,7 @@ export default function StudentClassPage() {
         .eq('class_id', classId)
         .order('created_at', { ascending: false });
       setSubmissions(subs || []);
+      setInReview(await submissionsInReview(supabase));
 
       setLoading(false);
     }
@@ -83,6 +86,11 @@ export default function StudentClassPage() {
                   {p.description && (
                     <p className="text-sm text-gray-500 mt-1">
                       {p.description}
+                    </p>
+                  )}
+                  {p.feedback_release === 'after_review' && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Your teacher checks the feedback before you see it.
                     </p>
                   )}
                   <div className="flex items-center gap-4 mt-3">
@@ -141,6 +149,11 @@ export default function StudentClassPage() {
                     {sub.assignment_name && sub.title && (
                       <span className="text-xs text-gray-400 ml-2">
                         {sub.assignment_name}
+                      </span>
+                    )}
+                    {inReview.has(sub.id) && (
+                      <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                        Teacher checking feedback
                       </span>
                     )}
                   </div>

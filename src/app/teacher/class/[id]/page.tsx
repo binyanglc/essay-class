@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ClassMember, Project, Profile, CorrectionLevel } from '@/types';
+import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease } from '@/types';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
+import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -14,11 +15,14 @@ export default function ClassDetailPage() {
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectCounts, setProjectCounts] = useState<Record<string, number>>({});
+  // Feedback the teacher hasn't released to students yet, per project
+  const [waitingCounts, setWaitingCounts] = useState<Record<string, number>>({});
 
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [newLevel, setNewLevel] = useState<CorrectionLevel>('standard');
+  const [newRelease, setNewRelease] = useState<FeedbackRelease>('immediate');
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -67,6 +71,21 @@ export default function ClassDetailPage() {
         counts[p.id] = count || 0;
       }
       setProjectCounts(counts);
+
+      const { data: waiting } = await supabase
+        .from('feedback')
+        .select('submission_id, submissions!inner(project_id)')
+        .is('released_at', null)
+        .in(
+          'submissions.project_id',
+          projectData.map((p: Project) => p.id)
+        );
+      const waitingByProject: Record<string, number> = {};
+      for (const w of (waiting ?? []) as unknown as { submissions: { project_id: string | null } }[]) {
+        const pid = w.submissions?.project_id;
+        if (pid) waitingByProject[pid] = (waitingByProject[pid] || 0) + 1;
+      }
+      setWaitingCounts(waitingByProject);
     }
 
     setLoading(false);
@@ -84,6 +103,7 @@ export default function ClassDetailPage() {
         description: newDesc,
         dueDate: newDueDate || null,
         correctionLevel: newLevel,
+        feedbackRelease: newRelease,
       }),
     });
     if (res.ok) {
@@ -91,6 +111,7 @@ export default function ClassDetailPage() {
       setNewDesc('');
       setNewDueDate('');
       setNewLevel('standard');
+      setNewRelease('immediate');
       setShowForm(false);
       loadAll();
     }
@@ -259,6 +280,7 @@ export default function ClassDetailPage() {
               />
             </div>
             <CorrectionLevelSelect id="new-project-correction-level" value={newLevel} onChange={setNewLevel} />
+            <FeedbackReleaseSelect id="new-project-feedback-release" value={newRelease} onChange={setNewRelease} />
             <div className="flex gap-2">
               <button
                 onClick={handleCreateProject}
@@ -268,7 +290,7 @@ export default function ClassDetailPage() {
                 {creating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); }}
+                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); setNewRelease('immediate'); }}
                 className="text-sm text-gray-500 px-4 py-2"
               >
                 Cancel
@@ -306,6 +328,11 @@ export default function ClassDetailPage() {
                     <span className="text-xs text-gray-400">
                       {projectCounts[p.id] || 0} submissions
                     </span>
+                    {waitingCounts[p.id] > 0 && (
+                      <span className="text-xs text-amber-700" title="Students can't see this feedback until you release it">
+                        {waitingCounts[p.id]} to release
+                      </span>
+                    )}
                     <Link href={`/teacher/class/${id}/project/${p.id}`} className="text-xs text-blue-600">
                       View &rarr;
                     </Link>

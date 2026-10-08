@@ -10,6 +10,7 @@ import { getStudentErrorHistory } from '@/lib/error-tracking';
 import ErrorSummary from '@/components/ErrorSummary';
 import FeedbackView from '@/components/FeedbackView';
 import CompositionReview from '@/components/CompositionReview';
+import { isWaitingForRelease } from '@/lib/feedback-release';
 
 export default function TeacherStudentDetailPage() {
   const { id: studentId } = useParams();
@@ -145,6 +146,23 @@ export default function TeacherStudentDetailPage() {
                   selectedSub.assignment_name ||
                   'Untitled'}
               </h2>
+              {isWaitingForRelease(selectedFeedback) && (
+                <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <span className="font-semibold">Not released.</span>{' '}
+                  The student can&apos;t see this feedback yet.
+                  {selectedSub.project_id && selectedSub.class_id && (
+                    <>
+                      {' '}
+                      <Link
+                        href={`/teacher/class/${selectedSub.class_id}/project/${selectedSub.project_id}`}
+                        className="font-medium underline"
+                      >
+                        Check and release it in the project
+                      </Link>
+                    </>
+                  )}
+                </p>
+              )}
               <CompositionReview
                 key={selectedSub.id}
                 text={selectedSub.final_text}

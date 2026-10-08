@@ -72,6 +72,26 @@ export function isCorrectionLevel(v: unknown): v is CorrectionLevel {
   return v === 'essential' || v === 'standard' || v === 'detailed';
 }
 
+/** When students see the feedback (set per project by the teacher, migration v14). */
+export type FeedbackRelease = 'immediate' | 'after_review';
+
+export const FEEDBACK_RELEASES: { value: FeedbackRelease; label: string; hint: string }[] = [
+  {
+    value: 'immediate',
+    label: 'Right after they submit',
+    hint: 'Students see the AI feedback straight away. You can still check and edit it afterwards.',
+  },
+  {
+    value: 'after_review',
+    label: 'After I check and release it',
+    hint: 'Students see the feedback only once you release it. You see it, and Common Issues, straight away.',
+  },
+];
+
+export function isFeedbackRelease(v: unknown): v is FeedbackRelease {
+  return v === 'immediate' || v === 'after_review';
+}
+
 export interface Project {
   id: string;
   class_id: string;
@@ -80,6 +100,8 @@ export interface Project {
   due_date: string | null;
   /** Added in migration v9; older rows default to 'standard'. */
   correction_level?: CorrectionLevel;
+  /** Added in migration v14; older rows default to 'immediate'. */
+  feedback_release?: FeedbackRelease;
   created_at: string;
 }
 
@@ -127,6 +149,8 @@ export interface Feedback {
   teacher_edited_at: string | null;
   /** Level the AI used; null for older feedback (which only corrected a few key sentences). */
   correction_level?: CorrectionLevel | null;
+  /** When the student could first see it; null = waiting for the teacher to release it (migration v14). */
+  released_at?: string | null;
   created_at: string;
 }
 

@@ -36,18 +36,21 @@ export async function POST(request: NextRequest) {
         ? imagePath
         : null;
 
-    // If projectId provided, look up project name for assignment_name and the teacher's correction level
+    // If projectId provided, look up project name for assignment_name and the teacher's settings
     let resolvedAssignment = assignmentName || null;
     let correctionLevel: CorrectionLevel = 'standard';
+    // The teacher checks the feedback before the student sees it (migration v14)
+    let holdForReview = false;
     if (projectId) {
       const { data: project } = await supabase
         .from('projects')
-        .select('project_name, correction_level')
+        .select('project_name, correction_level, feedback_release')
         .eq('id', projectId)
         .single();
       if (project) {
         resolvedAssignment = project.project_name;
         if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
+        holdForReview = project.feedback_release === 'after_review';
       }
     }
 
@@ -111,26 +114,29 @@ export async function POST(request: NextRequest) {
       sentence_revisions: revisions,
     };
 
-    const { data: feedback } = await supabase
-      .from('feedback')
-      .insert({
-        submission_id: submission.id,
-        ...aiFeedback,
-        strengths: [],
-        main_problems: [],
-        repeated_error_summary: '',
-        next_step_advice: '',
-        correction_level: correctionLevel,
-      })
-      .select()
-      .single();
+    // Feedback held for review can't be read back by the student (RLS), so it is
+    // saved under an id made here and not selected after the insert.
+    const feedbackId = crypto.randomUUID();
+    const { error: feedbackError } = await supabase.from('feedback').insert({
+      id: feedbackId,
+      submission_id: submission.id,
+      ...aiFeedback,
+      strengths: [],
+      main_problems: [],
+      repeated_error_summary: '',
+      next_step_advice: '',
+      correction_level: correctionLevel,
+      released_at: holdForReview ? null : new Date().toISOString(),
+    });
+    if (feedbackError) console.error('Feedback insert error:', feedbackError);
+    const feedbackSaved = !feedbackError;
 
     // Keep a copy of it that the teacher's edits never overwrite (migration v13),
     // so we can see later what the teacher kept, changed, removed or added.
     // If it can't be saved (e.g. v13 not run yet), everything else still works.
-    if (feedback) {
+    if (feedbackSaved) {
       const { error: originalError } = await supabase.from('feedback_ai_originals').insert({
-        feedback_id: feedback.id,
+        feedback_id: feedbackId,
         submission_id: submission.id,
         model: feedbackModel(),
         correction_level: correctionLevel,
@@ -141,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     // Error labels from the fixed list, one step after the corrections (lib/ai-tagging).
     // If labelling fails the feedback is still saved; the teacher can add labels.
-    if (feedback && revisions.length > 0) {
+    if (feedbackSaved && revisions.length > 0) {
       let labels: AiTagRow[] = [];
       try {
         labels = await tagRevisions(
@@ -159,7 +165,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ submission, feedback });
+    return NextResponse.json({
+      submission,
+      feedbackId: feedbackSaved ? feedbackId : null,
+      // The student sees the feedback once the teacher releases it
+      inReview: feedbackSaved && holdForReview,
+    });
   } catch (error) {
     console.error('Submission error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

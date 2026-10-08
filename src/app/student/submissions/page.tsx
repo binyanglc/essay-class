@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Submission } from '@/types';
+import { submissionsInReview } from '@/lib/feedback-release';
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [inReview, setInReview] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -24,6 +26,7 @@ export default function SubmissionsPage() {
         .order('created_at', { ascending: false });
 
       setSubmissions(data || []);
+      setInReview(await submissionsInReview(supabase));
       setLoading(false);
     }
     load();
@@ -70,6 +73,11 @@ export default function SubmissionsPage() {
               {sub.assignment_name && (
                 <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
                   {sub.assignment_name}
+                </span>
+              )}
+              {inReview.has(sub.id) && (
+                <span className="inline-block mt-2 ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                  Teacher checking feedback
                 </span>
               )}
             </Link>
