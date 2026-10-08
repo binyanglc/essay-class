@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sanitizeRevisions } from '@/lib/revisions';
+import { withMarks } from '@/lib/hints';
 
 export async function PUT(
   request: NextRequest,
@@ -37,7 +38,8 @@ export async function PUT(
 
     if ('sentence_revisions' in updates) {
       const revisions = sanitizeRevisions(updates.sentence_revisions);
-      if (revisions) safeUpdates.sentence_revisions = revisions;
+      // Where each correction changes the student's words (what "hints only" students see)
+      if (revisions) safeUpdates.sentence_revisions = withMarks(revisions);
     }
 
     if (Object.keys(safeUpdates).length === 0) {

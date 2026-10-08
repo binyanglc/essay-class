@@ -13,9 +13,11 @@ interface Props {
   /** With the composition, error labels link to their corrections instead of repeating them. */
   compositionText?: string;
   revisions?: SentenceRevision[] | null;
+  /** "Hints only": the labels are shown with each hint, so the sections show only the comments. */
+  showLabels?: boolean;
 }
 
-export default function FeedbackView({ feedback, errorTags: allTags, compositionText, revisions }: Props) {
+export default function FeedbackView({ feedback, errorTags: allTags, compositionText, revisions, showLabels = true }: Props) {
   const [comments, setComments] = useState<FeedbackComment[]>([]);
   // Labels the teacher removed are not shown
   const errorTags = allTags?.filter(isActive);
@@ -34,7 +36,7 @@ export default function FeedbackView({ feedback, errorTags: allTags, composition
 
   const links = compositionText ? linkTagsToCorrections(compositionText, revisions, errorTags ?? []) : null;
   const renderTags = (tags: ErrorTag[]) =>
-    links ? (
+    !showLabels ? null : links ? (
       <ErrorLabels tags={tags} links={links} />
     ) : (
       tags.length > 0 && (
@@ -75,7 +77,7 @@ export default function FeedbackView({ feedback, errorTags: allTags, composition
           {new Date(reviewedAt).toLocaleDateString('en-US')}
         </p>
       )}
-      {unchecked && (
+      {unchecked && showLabels && (
         <p className="text-xs text-gray-500">
           Labels marked <span className="rounded bg-white px-1 text-[9px] font-semibold uppercase tracking-wide ring-1 ring-inset ring-gray-200">AI</span>{' '}
           are suggestions — your teacher hasn&apos;t checked them yet.
@@ -149,7 +151,7 @@ export default function FeedbackView({ feedback, errorTags: allTags, composition
       {/* Punctuation, linking, register, natural expression: only when there are labels */}
       {EXTRA_LABEL_TYPES.map((type) => {
         const tags = groupedErrors.get(type) || [];
-        if (tags.length === 0) return null;
+        if (tags.length === 0 || !showLabels) return null;
         return (
           <section key={type}>
             <h3 className="font-semibold text-gray-900 mb-2">{ERROR_TYPE_LABELS[type]}</h3>

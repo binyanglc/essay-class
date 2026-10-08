@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { isCorrectionLevel, isFeedbackRelease } from '@/types';
+import { isCorrectionLevel, isFeedbackRelease, isFeedbackStyle } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
-    const { classId, projectName, description, dueDate, correctionLevel, feedbackRelease } = await request.json();
+    const { classId, projectName, description, dueDate, correctionLevel, feedbackRelease, feedbackStyle } =
+      await request.json();
 
     if (!classId || !projectName?.trim()) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
         due_date: dueDate || null,
         correction_level: isCorrectionLevel(correctionLevel) ? correctionLevel : 'standard',
         feedback_release: isFeedbackRelease(feedbackRelease) ? feedbackRelease : 'immediate',
+        feedback_style: isFeedbackStyle(feedbackStyle) ? feedbackStyle : 'corrections',
       })
       .select()
       .single();

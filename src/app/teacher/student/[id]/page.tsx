@@ -174,6 +174,7 @@ export default function TeacherStudentDetailPage() {
                 errorTags={selectedTags}
                 role="teacher"
                 feedbackId={selectedFeedback?.id}
+                hintMode={selectedFeedback?.feedback_style === 'hints'}
                 className="mb-6"
               />
               {selectedFeedback ? (

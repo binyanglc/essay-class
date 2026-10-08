@@ -66,6 +66,8 @@ interface Props {
   onConfirmAllTags?: () => void;
   /** The teacher's own label names already used in this class. */
   labelSuggestions?: LabelSuggestion[];
+  /** "Hints only" assignment: the teacher also sees and edits the hint each student gets. */
+  hintMode?: boolean;
   label?: string;
   className?: string;
 }
@@ -92,6 +94,7 @@ export default function CompositionReview({
   onConfirmTag,
   onConfirmAllTags,
   labelSuggestions,
+  hintMode = false,
   label = 'Composition',
   className = '',
 }: Props) {
@@ -138,6 +141,7 @@ export default function CompositionReview({
           original: draft.original ?? '',
           revised: draft.revised,
           explanation: draft.explanation,
+          hint: draft.hint,
           start: draft.start,
           end: draft.end,
           source: 'teacher',
@@ -150,6 +154,7 @@ export default function CompositionReview({
             ...r,
             revised: draft.revised,
             explanation: draft.explanation,
+            hint: draft.hint,
             ...(draft.original !== undefined ? { original: draft.original, start: draft.start, end: draft.end } : {}),
           }
         : r
@@ -186,7 +191,10 @@ export default function CompositionReview({
     if (!d) return list;
     if (d.isNew) {
       const unchanged =
-        d.revised.trim() === (d.original ?? '').trim() && !d.explanation.trim() && !d.labels?.added.length;
+        d.revised.trim() === (d.original ?? '').trim() &&
+        !d.explanation.trim() &&
+        !(d.hint ?? '').trim() &&
+        !d.labels?.added.length;
       if (unchanged) return list;
       return [
         ...list,
@@ -195,19 +203,23 @@ export default function CompositionReview({
           original: d.original ?? '',
           revised: d.revised,
           explanation: d.explanation,
+          ...((d.hint ?? '').trim() ? { hint: d.hint!.trim() } : {}),
           start: d.start,
           end: d.end,
           source: 'teacher',
         },
       ];
     }
-    if (d.revised === d.baseRevised && d.explanation === d.baseExplanation) return list;
+    if (d.revised === d.baseRevised && d.explanation === d.baseExplanation && (d.hint ?? '') === (d.baseHint ?? '')) {
+      return list;
+    }
     return list.map((r) =>
       r.id === d.id
         ? {
             ...r,
             revised: d.revised,
             explanation: d.explanation,
+            hint: (d.hint ?? '').trim() || undefined,
             ...(d.original !== undefined ? { original: d.original, start: d.start, end: d.end } : {}),
           }
         : r
@@ -281,9 +293,11 @@ export default function CompositionReview({
       id: active.id,
       revised,
       explanation: active.explanation,
+      hint: active.hint ?? '',
       isNew: false,
       baseRevised: revised,
       baseExplanation: active.explanation,
+      baseHint: active.hint ?? '',
       ...(p ? { original: text.slice(p.start, p.end), start: p.start, end: p.end } : {}),
     });
   }
@@ -316,7 +330,7 @@ export default function CompositionReview({
     if (list !== revs) onChangeRevisions(list);
     const id = newRevisionId();
     setActiveId(id);
-    setDraft({ id, revised: words, explanation: '', isNew: true, original: words, start, end });
+    setDraft({ id, revised: words, explanation: '', hint: '', isNew: true, original: words, start, end });
     setChosenMode('track');
   }
 
@@ -383,6 +397,7 @@ export default function CompositionReview({
         n={numbers.get(active.id) ?? 0}
         total={ordered.length}
         canEdit={canEdit}
+        hintMode={hintMode}
         tags={editingActive ? withDraftLabels(tagsFor(active.id), editingActive.labels) : tagsFor(active.id)}
         draft={draft}
         discussion={discussion.node}

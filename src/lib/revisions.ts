@@ -44,6 +44,8 @@ export function sanitizeRevisions(input: unknown): SentenceRevision[] | null {
     }
     if (o.source === 'ai' || o.source === 'teacher') rev.source = o.source;
     if (typeof o.commentKey === 'string' && o.commentKey) rev.commentKey = o.commentKey.slice(0, 60);
+    // "Hints only" assignments (marks are always worked out again on the server, see lib/hints)
+    if (typeof o.hint === 'string' && o.hint.trim()) rev.hint = o.hint.trim().slice(0, 300);
     out.push(rev);
   }
   return out;

@@ -72,6 +72,26 @@ export function isCorrectionLevel(v: unknown): v is CorrectionLevel {
   return v === 'essential' || v === 'standard' || v === 'detailed';
 }
 
+/** What students get (set per project by the teacher, migration v16). */
+export type FeedbackStyle = 'corrections' | 'hints';
+
+export const FEEDBACK_STYLES: { value: FeedbackStyle; label: string; hint: string }[] = [
+  {
+    value: 'corrections',
+    label: 'Corrections',
+    hint: 'Students see each corrected sentence and why it was changed.',
+  },
+  {
+    value: 'hints',
+    label: 'Hints only',
+    hint: 'Students see where each problem is, what kind it is and a short hint — never the corrected sentence. They fix it themselves. You still see the full corrections.',
+  },
+];
+
+export function isFeedbackStyle(v: unknown): v is FeedbackStyle {
+  return v === 'corrections' || v === 'hints';
+}
+
 /** When students see the feedback (set per project by the teacher, migration v14). */
 export type FeedbackRelease = 'immediate' | 'after_review';
 
@@ -102,6 +122,8 @@ export interface Project {
   correction_level?: CorrectionLevel;
   /** Added in migration v14; older rows default to 'immediate'. */
   feedback_release?: FeedbackRelease;
+  /** Added in migration v16; older rows default to 'corrections'. */
+  feedback_style?: FeedbackStyle;
   created_at: string;
 }
 
@@ -151,8 +173,10 @@ export interface Feedback {
   correction_level?: CorrectionLevel | null;
   /** When the student could first see it; null = waiting for the teacher to release it (migration v14). */
   released_at?: string | null;
-  /** When the class teacher first opened it; null = not yet (migration v14). */
+  /** When the class teacher first opened it; null = not yet (migration v15). */
   teacher_viewed_at?: string | null;
+  /** 'hints': the student never sees the corrected sentences (migration v16); null/absent = corrections. */
+  feedback_style?: FeedbackStyle | null;
   created_at: string;
 }
 
@@ -169,7 +193,20 @@ export interface SentenceRevision {
   source?: 'ai' | 'teacher';
   /** Comment section key for revisions created before ids existed (e.g. "sentence_2"). */
   commentKey?: string;
+  /** "Hints only": one sentence for the student that doesn't give the answer (AI-written, teacher can edit). */
+  hint?: string;
+  /** Where `original` changes, worked out on the server from original → revised (see lib/hints). */
+  marks?: HintMark[];
 }
+
+/** One changed place in a revision's `original`: [start, end) offsets within it (start = end: something is missing there). */
+export interface HintMark {
+  start: number;
+  end: number;
+  kind: HintKind;
+}
+
+export type HintKind = 'missing' | 'extra' | 'wrong' | 'order';
 
 export interface ErrorTag {
   id: string;

@@ -5,9 +5,10 @@ import { tagRevisions } from '@/lib/ai-tagging';
 import type { AiTagRow } from '@/lib/ai-tagging';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
+import { prepareHintFeedback, withMarks } from '@/lib/hints';
 import { joinWrappedLines } from '@/lib/text-layout';
 import { isCorrectionLevel } from '@/types';
-import type { CorrectionLevel } from '@/types';
+import type { CorrectionLevel, FeedbackStyle } from '@/types';
 
 // Feedback and labelling are two AI calls in a row
 export const maxDuration = 60;
@@ -36,22 +37,39 @@ export async function POST(request: NextRequest) {
         ? imagePath
         : null;
 
+    // Only into a class the student has joined (or the class teacher trying it out)
+    const [{ data: membership }, { data: cls }] = await Promise.all([
+      supabase.from('class_members').select('id').eq('class_id', classId).eq('student_id', user.id).limit(1),
+      supabase.from('classes').select('teacher_id').eq('id', classId).limit(1),
+    ]);
+    const isMember = Array.isArray(membership) && membership.length > 0;
+    const isTeacher = Array.isArray(cls) && cls[0]?.teacher_id === user.id;
+    if (!isMember && !isTeacher) {
+      return NextResponse.json({ error: 'You are not in this class' }, { status: 403 });
+    }
+
     // If projectId provided, look up project name for assignment_name and the teacher's settings
     let resolvedAssignment = assignmentName || null;
     let correctionLevel: CorrectionLevel = 'standard';
     // The teacher checks the feedback before the student sees it (migration v14)
     let holdForReview = false;
+    // "Hints only": the student never sees the corrected sentences (migration v16)
+    let feedbackStyle: FeedbackStyle = 'corrections';
     if (projectId) {
       const { data: project } = await supabase
         .from('projects')
-        .select('project_name, correction_level, feedback_release')
+        .select('class_id, project_name, correction_level, feedback_release, feedback_style')
         .eq('id', projectId)
         .single();
-      if (project) {
-        resolvedAssignment = project.project_name;
-        if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
-        holdForReview = project.feedback_release === 'after_review';
+      // The project's settings (e.g. "hints only") can't be dodged by naming another class's project
+      if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      if (project.class_id !== classId) {
+        return NextResponse.json({ error: 'This project belongs to another class' }, { status: 400 });
       }
+      resolvedAssignment = project.project_name;
+      if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
+      holdForReview = project.feedback_release === 'after_review';
+      if (project.feedback_style === 'hints') feedbackStyle = 'hints';
     }
 
     const { data: submission, error: subError } = await supabase
@@ -90,7 +108,8 @@ export async function POST(request: NextRequest) {
         joinWrappedLines(finalText),
         errorPatterns,
         previousCount ?? 0,
-        correctionLevel
+        correctionLevel,
+        { style: feedbackStyle }
       );
     } catch (aiError) {
       console.error('AI feedback error:', aiError);
@@ -101,18 +120,29 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const revisions = anchorRevisions(finalText, feedbackData.sentence_revisions);
-
-    // The AI's feedback as it is first shown to the student and the teacher
-    const aiFeedback = {
+    const anchored = anchorRevisions(finalText, feedbackData.sentence_revisions);
+    const comments = {
       overall_comment: feedbackData.overall_comment || '',
       characters_comment: feedbackData.characters_comment || '',
       vocabulary_comment: feedbackData.vocabulary_comment || '',
       grammar_comment: feedbackData.grammar_comment || '',
       content_feedback: feedbackData.content_feedback || '',
       structure_feedback: feedbackData.structure_feedback || '',
+    };
+    // "Hints only": hints and comments that don't give the answer away; marks show where the problems are
+    const prepared =
+      feedbackStyle === 'hints'
+        ? prepareHintFeedback(finalText, comments, anchored)
+        : { comments, revisions: withMarks(anchored) };
+    const revisions = prepared.revisions;
+
+    // The feedback as it is first shown to the student and the teacher
+    const aiFeedback = {
+      ...prepared.comments,
       sentence_revisions: revisions,
     };
+    // Exactly what the AI wrote (before "hints only" checks), for the research copy below
+    const aiRaw = { ...comments, sentence_revisions: withMarks(anchored) };
 
     // Feedback held for review can't be read back by the student (RLS), so it is
     // saved under an id made here and not selected after the insert.
@@ -127,6 +157,7 @@ export async function POST(request: NextRequest) {
       next_step_advice: '',
       correction_level: correctionLevel,
       released_at: holdForReview ? null : new Date().toISOString(),
+      feedback_style: feedbackStyle,
     });
     if (feedbackError) console.error('Feedback insert error:', feedbackError);
     const feedbackSaved = !feedbackError;
@@ -140,7 +171,7 @@ export async function POST(request: NextRequest) {
         submission_id: submission.id,
         model: feedbackModel(),
         correction_level: correctionLevel,
-        content: aiFeedback,
+        content: aiRaw,
       });
       if (originalError) console.error('Saving the original AI feedback failed:', originalError);
     }

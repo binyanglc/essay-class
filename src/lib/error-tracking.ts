@@ -195,13 +195,45 @@ export function inDomainOrder(groups: IssueGroup[]): IssueGroup[] {
 }
 
 async function studentTags(supabase: SupabaseClient, studentId: string): Promise<ErrorTag[]> {
-  const { data } = await supabase
-    .from('error_tags')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('created_at', { ascending: false })
-    .limit(500);
-  return ((data ?? []) as ErrorTag[]).filter(isActive);
+  const [{ data }, hintTags] = await Promise.all([
+    supabase
+      .from('error_tags')
+      .select('*')
+      .eq('student_id', studentId)
+      .order('created_at', { ascending: false })
+      .limit(500),
+    ownHintTags(supabase, studentId),
+  ]);
+  const rows = (data ?? []) as ErrorTag[];
+  // Students can't read labels from "hints only" feedback directly; they get them without the answers
+  const seen = new Set(rows.map((t) => t.id));
+  const extra = hintTags.filter((t) => !seen.has(t.id));
+  if (extra.length === 0) return rows.filter(isActive);
+  // Newest first; labels saved at the same moment keep their order (stable sort)
+  return [...rows, ...extra]
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    .slice(0, 500)
+    .filter(isActive);
+}
+
+/**
+ * The signed-in student's own labels from released "hints only" feedback
+ * (migration v16), without the right answers. Empty for anyone else (a
+ * teacher reads those labels in full above), or if it can't be checked.
+ */
+async function ownHintTags(supabase: SupabaseClient, studentId: string): Promise<ErrorTag[]> {
+  const { data, error } = await supabase.rpc('my_hint_tags');
+  if (error || !Array.isArray(data)) return [];
+  return (data as Partial<ErrorTag>[])
+    .filter((t) => t.student_id === studentId)
+    .map((t) => ({
+      pattern_name: '',
+      suggested_revision: '',
+      explanation: '',
+      improvement_tip: '',
+      sentence_index: null,
+      ...t,
+    })) as ErrorTag[];
 }
 
 /** One student's labels, for "My Error Patterns" (style suggestions included). */

@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease } from '@/types';
+import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease, FeedbackStyle } from '@/types';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
+import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ export default function ClassDetailPage() {
   const [newDueDate, setNewDueDate] = useState('');
   const [newLevel, setNewLevel] = useState<CorrectionLevel>('standard');
   const [newRelease, setNewRelease] = useState<FeedbackRelease>('immediate');
+  const [newStyle, setNewStyle] = useState<FeedbackStyle>('corrections');
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -104,6 +106,7 @@ export default function ClassDetailPage() {
         dueDate: newDueDate || null,
         correctionLevel: newLevel,
         feedbackRelease: newRelease,
+        feedbackStyle: newStyle,
       }),
     });
     if (res.ok) {
@@ -112,6 +115,7 @@ export default function ClassDetailPage() {
       setNewDueDate('');
       setNewLevel('standard');
       setNewRelease('immediate');
+      setNewStyle('corrections');
       setShowForm(false);
       loadAll();
     }
@@ -279,6 +283,7 @@ export default function ClassDetailPage() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
             </div>
+            <FeedbackStyleSelect id="new-project-feedback-style" value={newStyle} onChange={setNewStyle} />
             <CorrectionLevelSelect id="new-project-correction-level" value={newLevel} onChange={setNewLevel} />
             <FeedbackReleaseSelect id="new-project-feedback-release" value={newRelease} onChange={setNewRelease} />
             <div className="flex gap-2">
@@ -290,7 +295,7 @@ export default function ClassDetailPage() {
                 {creating ? 'Creating...' : 'Create'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); setNewRelease('immediate'); }}
+                onClick={() => { setShowForm(false); setNewName(''); setNewDesc(''); setNewDueDate(''); setNewLevel('standard'); setNewRelease('immediate'); setNewStyle('corrections'); }}
                 className="text-sm text-gray-500 px-4 py-2"
               >
                 Cancel

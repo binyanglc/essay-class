@@ -15,13 +15,19 @@ import {
   SentenceRevision,
   CorrectionLevel,
   CORRECTION_LEVELS,
+  FEEDBACK_STYLES,
   FeedbackRelease,
+  FeedbackStyle,
 } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
 import CompositionReview from '@/components/CompositionReview';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
+import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
+import HintsView from '@/components/HintsView';
+import { fetchHintView } from '@/lib/hints';
+import type { HintView } from '@/lib/hints';
 import ErrorLabels, { ExtraLabelSections } from '@/components/ErrorLabels';
 import type { LabelSuggestion } from '@/components/RevisionInspector';
 import { labelChangesFor, linkTagsToCorrections } from '@/lib/correction-links';
@@ -68,6 +74,10 @@ export default function ProjectDetailPage() {
   const [projDueDraft, setProjDueDraft] = useState('');
   const [projLevelDraft, setProjLevelDraft] = useState<CorrectionLevel>('standard');
   const [projReleaseDraft, setProjReleaseDraft] = useState<FeedbackRelease>('immediate');
+  const [projStyleDraft, setProjStyleDraft] = useState<FeedbackStyle>('corrections');
+  // "Hints only": what the student sees (the saved version), shown instead of the editor
+  const [studentPreview, setStudentPreview] = useState<HintView | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   // Each submission's feedback: can the student see it yet (null = not released), has the teacher opened it
   const [releaseInfo, setReleaseInfo] = useState<Record<string, ReleaseInfo>>({});
@@ -229,6 +239,7 @@ export default function ProjectDetailPage() {
     setEditingRevisions(null);
     setTagEdits(null);
     setSaveError(null);
+    setStudentPreview(null);
 
     const { data: fb } = await supabase
       .from('feedback')
@@ -454,6 +465,11 @@ export default function ProjectDetailPage() {
 
     // Common Issues counts the saved labels: refresh it now
     loadIssues();
+    // The student view (if open) shows what is saved
+    if (studentPreview && latestSelection.current === subId) {
+      const view = await fetchHintView(supabase, subId);
+      if (latestSelection.current === subId) setStudentPreview(view);
+    }
     setSaving(false);
     return allSaved;
   };
@@ -494,6 +510,22 @@ export default function ProjectDetailPage() {
     if (selectedSub) reloadSelectedTags(selectedSub.id);
   };
 
+  /** "Hints only": show exactly what the student gets (from the database), or go back to editing. */
+  const toggleStudentPreview = async () => {
+    if (studentPreview) {
+      setStudentPreview(null);
+      return;
+    }
+    if (!selectedSub) return;
+    const subId = selectedSub.id;
+    setPreviewLoading(true);
+    const view = await fetchHintView(supabase, subId);
+    setPreviewLoading(false);
+    if (latestSelection.current !== subId) return;
+    if (view) setStudentPreview(view);
+    else setSaveError("Couldn't load the student view. Please try again.");
+  };
+
   const handleEditProject = async () => {
     if (!projNameDraft.trim()) return;
     const res = await fetch(`/api/projects/${projectId}`, {
@@ -505,6 +537,7 @@ export default function ProjectDetailPage() {
         dueDate: projDueDraft || null,
         correctionLevel: projLevelDraft,
         feedbackRelease: projReleaseDraft,
+        feedbackStyle: projStyleDraft,
       }),
     });
     if (res.ok) {
@@ -580,6 +613,12 @@ export default function ProjectDetailPage() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
+            <FeedbackStyleSelect
+              id="project-feedback-style"
+              value={projStyleDraft}
+              onChange={setProjStyleDraft}
+              existingProject
+            />
             <CorrectionLevelSelect
               id="project-correction-level"
               value={projLevelDraft}
@@ -620,6 +659,7 @@ export default function ProjectDetailPage() {
                   setProjDueDraft(project.due_date ? new Date(project.due_date).toISOString().slice(0, 16) : '');
                   setProjLevelDraft(project.correction_level ?? 'standard');
                   setProjReleaseDraft(project.feedback_release ?? 'immediate');
+                  setProjStyleDraft(project.feedback_style ?? 'corrections');
                 }}
                 className="text-xs text-gray-400 hover:text-blue-600"
                 title="Edit project"
@@ -636,7 +676,8 @@ export default function ProjectDetailPage() {
               </p>
             )}
             <p className="text-xs mt-1 text-gray-400">
-              AI corrections:{' '}
+              Feedback: {FEEDBACK_STYLES.find((st) => st.value === (project.feedback_style ?? 'corrections'))?.label}
+              {' '}&middot; AI checking:{' '}
               {CORRECTION_LEVELS.find((l) => l.value === (project.correction_level ?? 'standard'))?.label}
               {' '}&middot; Students see the feedback:{' '}
               {project.feedback_release === 'after_review' ? 'after you release it' : 'right after they submit'}
@@ -822,6 +863,32 @@ export default function ProjectDetailPage() {
                 </p>
               )}
 
+              {selectedFeedback?.feedback_style === 'hints' && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">
+                  <span>
+                    <span className="font-semibold">Hints only.</span> The student sees where each problem is, its
+                    labels and the hint — not your suggestions or explanations.
+                  </span>
+                  <button
+                    onClick={toggleStudentPreview}
+                    disabled={previewLoading}
+                    className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-blue-800 ring-1 ring-inset ring-blue-200 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    {studentPreview ? 'Back to editing' : previewLoading ? 'Loading...' : 'Student view'}
+                  </button>
+                </div>
+              )}
+
+              {studentPreview ? (
+                <div className="mb-6">
+                  {hasEdits && (
+                    <p className="mb-3 text-xs text-amber-700">
+                      This shows what is saved — save your changes to see them here.
+                    </p>
+                  )}
+                  <HintsView text={selectedSub.final_text} view={studentPreview} preview label="Student view" />
+                </div>
+              ) : (
               <CompositionReview
                 key={selectedSub.id}
                 text={selectedSub.final_text}
@@ -840,8 +907,10 @@ export default function ProjectDetailPage() {
                 onConfirmTag={selectedFeedback ? handleConfirmTag : undefined}
                 onConfirmAllTags={selectedFeedback ? handleConfirmAllTags : undefined}
                 labelSuggestions={labelSuggestions}
+                hintMode={selectedFeedback?.feedback_style === 'hints'}
                 className="mb-6"
               />
+              )}
 
               {selectedFeedback ? (
                 <div>

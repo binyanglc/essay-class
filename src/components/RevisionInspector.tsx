@@ -20,6 +20,8 @@ export interface Draft {
   id: string;
   revised: string;
   explanation: string;
+  /** "Hints only": what the student sees instead of the suggestion. */
+  hint?: string;
   isNew: boolean;
   /** Anchor captured when editing starts, so the preview diffs against the student's own words. */
   original?: string;
@@ -28,6 +30,7 @@ export interface Draft {
   /** Values when editing started — unchanged drafts are not saved. */
   baseRevised?: string;
   baseExplanation?: string;
+  baseHint?: string;
   /** Label changes made while editing; they are applied on Done and dropped on Cancel. */
   labels?: DraftLabels;
 }
@@ -41,6 +44,8 @@ interface Props {
   n: number;
   total: number;
   canEdit: boolean;
+  /** "Hints only" assignment: show (and edit) the hint the student gets. */
+  hintMode?: boolean;
   tags: TagChip[];
   draft: Draft | null;
   /** The comment thread for this correction. */
@@ -236,7 +241,11 @@ export default function RevisionInspector(props: Props) {
               value={editing.explanation}
               onChange={(e) => props.onDraft({ ...editing, explanation: e.target.value })}
               rows={4}
-              placeholder="Optional — explain the correction for the student"
+              placeholder={
+                props.hintMode
+                  ? 'Optional — for you; in this assignment students see only the hint'
+                  : 'Optional — explain the correction for the student'
+              }
               className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
             />
             {!editing.isNew &&
@@ -252,6 +261,39 @@ export default function RevisionInspector(props: Props) {
             <p className="mt-1 whitespace-pre-line leading-relaxed text-gray-700">{item.explanation}</p>
           )}
         </div>
+        )}
+
+        {props.hintMode && (
+          <div>
+            <p className={label}>Hint for the student</p>
+            {editing ? (
+              <>
+              <textarea
+                id={`${slot}-hint-${item.id}`}
+                value={editing.hint ?? ''}
+                onChange={(e) => props.onDraft({ ...editing, hint: e.target.value })}
+                rows={2}
+                maxLength={300}
+                placeholder="Optional — one sentence that points to the problem without giving the answer"
+                className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {!editing.isNew &&
+                editing.revised !== editing.baseRevised &&
+                (editing.hint ?? '') === (editing.baseHint ?? '') &&
+                !!(editing.hint ?? '').trim() && (
+                  <p className="mt-1 text-[11px] leading-snug text-amber-700">
+                    You changed the suggestion — check that the hint still fits and doesn&apos;t give the answer away.
+                  </p>
+                )}
+              </>
+            ) : item.hint ? (
+              <p className="mt-1 leading-relaxed text-gray-700">{item.hint}</p>
+            ) : (
+              <p className="mt-1 text-xs leading-snug text-gray-400">
+                No hint — the student sees only where the problem is and its labels.
+              </p>
+            )}
+          </div>
         )}
 
         {(canLabel || tags.length > 0) && (

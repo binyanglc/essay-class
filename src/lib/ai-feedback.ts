@@ -1,4 +1,5 @@
 import { AIFeedbackResponse, CorrectionLevel, ErrorPattern } from '@/types';
+import type { FeedbackStyle } from '@/types';
 import { samplingParams, usageFrom } from './ai-models';
 import type { AiUsage, ReasoningEffort } from './ai-models';
 
@@ -13,6 +14,8 @@ export interface FeedbackOptions {
   fetchImpl?: typeof fetch;
   /** Told the tokens and time the call used. */
   onUsage?: (usage: AiUsage) => void;
+  /** "hints": the student won't see the corrections — also write a hint per correction, and no answers in comments. */
+  style?: FeedbackStyle;
 }
 
 /** Which model writes the feedback: option → OPENAI_FEEDBACK_MODEL → default. */
@@ -51,7 +54,7 @@ export async function generateFeedback(
     }
   }
 
-  const prompt = `You are a Chinese language writing teacher for American college students learning Chinese. Analyze this composition.
+  let prompt = `You are a Chinese language writing teacher for American college students learning Chinese. Analyze this composition.
 
 STUDENT'S COMPOSITION:
 ${text}
@@ -97,6 +100,8 @@ IMPORTANT:
 - Write explanations and comments in English, but write every Chinese character, word or sentence you mention in Chinese characters (in the student's script), as in the examples above. Never use pinyin alone; pinyin may follow in parentheses. Example: "Replace 要 with 希望", not "Replace yao with xiwang".
 - Return valid JSON only`;
 
+  if (opts.style === 'hints') prompt = withHintRules(prompt);
+
   const started = Date.now();
   const response = await (opts.fetchImpl ?? fetch)('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -129,4 +134,42 @@ IMPORTANT:
   opts.onUsage?.(usageFrom(data, model, Date.now() - started));
   const content = data.choices[0].message.content;
   return JSON.parse(content) as AIFeedbackResponse;
+}
+
+/**
+ * "Hints only" assignments: the student sees where each problem is, but never
+ * the revised sentence or the explanation (those are for the teacher). The AI
+ * adds one hint per correction, and keeps answers out of the comments.
+ * lib/hints double-checks both before anything is saved.
+ */
+export function withHintRules(prompt: string): string {
+  const schemaLine = `      "explanation": "Detailed English explanation — see EXPLANATION RULES below"\n    }`;
+  const important = `IMPORTANT:\n- sentence_revisions may be an empty array`;
+  // The general rule's example is itself a correction; give one that isn't
+  const scriptExample = `Example: "Replace 要 with 希望", not "Replace yao with xiwang".`;
+  if (!prompt.includes(schemaLine) || !prompt.includes(important) || !prompt.includes(scriptExample)) {
+    throw new Error('Feedback prompt changed: update withHintRules');
+  }
+  return prompt
+    .replace(scriptExample, `Example: "完 doesn't fit here", not "wan doesn't fit here".`)
+    .replace(
+      schemaLine,
+      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": "ONE short sentence for the student — see HINT RULES below"\n    }`
+    )
+    .replace(
+      important,
+      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" or "explanation" — only where the problem is, its type and your hint; the student must fix it themselves):
+1. Point to the kind of problem and the rule, or ask a guiding question. Do NOT give the answer: never write the corrected sentence, and never write any character or word that your correction adds or uses instead of the student's.
+2. You may quote the student's own words in Chinese characters.
+3. One sentence, in English, at the student's level.
+Examples (original → revised: hint):
+- 我们玩了很快乐 → 我们玩得很快乐: "Which 'de' joins a verb to a description of how the action went?"
+- 她的实习很快完了 → 她的实习很快就要结束了: "完 doesn't fit an internship coming to an end — which verb is used when a period of time or an event finishes?"
+- 我去了学校昨天 → 我昨天去了学校: "Where do time words go in a Chinese sentence?"
+- 我昨天去商店 → 我昨天去了商店: "This action is already finished — something is missing after the verb."
+
+COMMENTS for this student: describe the kinds of problems and the rules, but never write corrected sentences or the right words.
+
+${important}`
+    );
 }

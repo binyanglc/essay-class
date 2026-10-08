@@ -20,7 +20,7 @@ export default function CorrectionLevelSelect({
   return (
     <div>
       <label htmlFor={id} className="mb-1 block text-xs text-gray-500">
-        AI correction level
+        AI checking level
       </label>
       <select
         id={id}

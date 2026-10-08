@@ -9,6 +9,9 @@ import FeedbackView from '@/components/FeedbackView';
 import { isActive } from '@/lib/error-taxonomy';
 import CompositionReview from '@/components/CompositionReview';
 import { submissionsInReview } from '@/lib/feedback-release';
+import { fetchHintView } from '@/lib/hints';
+import type { HintView } from '@/lib/hints';
+import HintsView from '@/components/HintsView';
 
 export default function SubmissionDetailPage() {
   const { id } = useParams();
@@ -17,6 +20,8 @@ export default function SubmissionDetailPage() {
   const [errorTags, setErrorTags] = useState<ErrorTag[]>([]);
   // The teacher checks the feedback first and hasn't released it yet
   const [inReview, setInReview] = useState(false);
+  // "Hints only" assignment: the problems are marked, the corrections aren't shown
+  const [hintView, setHintView] = useState<HintView | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -36,7 +41,11 @@ export default function SubmissionDetailPage() {
           .eq('submission_id', sub.id)
           .single();
         setFeedback(fb);
-        if (!fb) setInReview((await submissionsInReview(supabase)).has(sub.id));
+        if (!fb) {
+          const hints = await fetchHintView(supabase, sub.id);
+          setHintView(hints);
+          if (!hints) setInReview((await submissionsInReview(supabase)).has(sub.id));
+        }
 
         const { data: tags } = await supabase
           .from('error_tags')
@@ -81,19 +90,55 @@ export default function SubmissionDetailPage() {
           </span>
         </div>
 
-        <CompositionReview
-          text={submission.final_text}
-          imagePath={submission.image_path}
-          revisions={feedback ? feedback.sentence_revisions ?? [] : null}
-          partial={!!feedback && !feedback.correction_level}
-          errorTags={errorTags}
-          role="student"
-          feedbackId={feedback?.id}
-          label="Your Composition"
-        />
+        {hintView ? (
+          <HintsView
+            text={submission.final_text}
+            view={hintView}
+            imagePath={submission.image_path}
+            resubmitHref={
+              submission.project_id
+                ? `/student/submit?classId=${submission.class_id}&projectId=${submission.project_id}`
+                : `/student/submit?classId=${submission.class_id}`
+            }
+          />
+        ) : (
+          <CompositionReview
+            text={submission.final_text}
+            imagePath={submission.image_path}
+            revisions={feedback ? feedback.sentence_revisions ?? [] : null}
+            partial={!!feedback && !feedback.correction_level}
+            errorTags={errorTags}
+            role="student"
+            feedbackId={feedback?.id}
+            label="Your Composition"
+          />
+        )}
       </div>
 
-      {feedback ? (
+      {hintView ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="text-lg font-bold mb-4">Feedback</h2>
+          <FeedbackView
+            feedback={{
+              ...hintView.feedback,
+              sentence_revisions: [],
+              strengths: [],
+              main_problems: [],
+              repeated_error_summary: '',
+              next_step_advice: '',
+            }}
+            errorTags={hintView.tags.map((t) => ({
+              ...t,
+              pattern_name: '',
+              suggested_revision: '',
+              explanation: '',
+              improvement_tip: '',
+              sentence_index: null,
+            }))}
+            showLabels={false}
+          />
+        </div>
+      ) : feedback ? (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="text-lg font-bold mb-4">Feedback</h2>
           <FeedbackView
