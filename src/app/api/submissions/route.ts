@@ -10,8 +10,9 @@ import { joinWrappedLines } from '@/lib/text-layout';
 import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isMaxDrafts } from '@/types';
 import type { CorrectionLevel, FeedbackStyle } from '@/types';
 
-// Feedback and labelling are two AI calls in a row
-export const maxDuration = 60;
+// Feedback and labelling are two AI calls in a row; models that think first
+// (e.g. gpt-6-luna) can take 30–50 s. 300 s is the Hobby maximum with Fluid compute.
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
