@@ -4,11 +4,19 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease, FeedbackStyle, DEFAULT_MAX_DRAFTS } from '@/types';
+import { Class, ClassMember, Project, Profile, CorrectionLevel, FeedbackRelease, FeedbackStyle, DEFAULT_MAX_DRAFTS, isStudentLevel } from '@/types';
+import type { StudentLevel } from '@/types';
 import CorrectionLevelSelect from '@/components/CorrectionLevelSelect';
 import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
 import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
 import DraftsSelect from '@/components/DraftsSelect';
+import StudentLevelSelect from '@/components/StudentLevelSelect';
+
+/** The level set on the newest assignment that has one (projects come newest first). */
+function latestStudentLevel(projects: Project[]): StudentLevel | null {
+  const level = projects.find((p) => isStudentLevel(p.student_level))?.student_level;
+  return isStudentLevel(level) ? level : null;
+}
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -27,6 +35,7 @@ export default function ClassDetailPage() {
   const [newRelease, setNewRelease] = useState<FeedbackRelease>('immediate');
   const [newStyle, setNewStyle] = useState<FeedbackStyle>('corrections');
   const [newDrafts, setNewDrafts] = useState(DEFAULT_MAX_DRAFTS);
+  const [newStudentLevel, setNewStudentLevel] = useState<StudentLevel | null>(null);
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -111,6 +120,7 @@ export default function ClassDetailPage() {
         feedbackRelease: newRelease,
         feedbackStyle: newStyle,
         maxDrafts: newDrafts,
+        studentLevel: newStudentLevel,
       }),
     });
     if (res.ok) {
@@ -256,7 +266,11 @@ export default function ClassDetailPage() {
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-semibold">Projects ({projects.length})</h2>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              // A new assignment starts at the level of the latest one (students' level only goes up)
+              if (!showForm) setNewStudentLevel(latestStudentLevel(projects));
+              setShowForm(!showForm);
+            }}
             className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
             + New Project
@@ -289,6 +303,7 @@ export default function ClassDetailPage() {
               />
             </div>
             <FeedbackStyleSelect id="new-project-feedback-style" value={newStyle} onChange={setNewStyle} />
+            <StudentLevelSelect id="new-project-student-level" value={newStudentLevel} onChange={setNewStudentLevel} />
             <CorrectionLevelSelect id="new-project-correction-level" value={newLevel} onChange={setNewLevel} />
             <FeedbackReleaseSelect id="new-project-feedback-release" value={newRelease} onChange={setNewRelease} />
             <DraftsSelect id="new-project-drafts" value={newDrafts} onChange={setNewDrafts} />

@@ -13,6 +13,7 @@ import { placeRevisions } from '@/lib/track-changes';
 import { withRevisionIds } from '@/lib/revisions';
 import { HintSentence } from '@/components/HintsView';
 import { DiffOps, NumberBadge } from '@/components/TrackChangesView';
+import FeedbackWaiting from '@/components/FeedbackWaiting';
 
 /** What to fix, next to the editor: the hints, or the corrections. */
 function FeedbackNotes({ text, fb }: { text: string; fb: StudentFeedback }) {
@@ -169,11 +170,12 @@ export default function RevisePage() {
                 disabled={sending || !text.trim() || unchanged}
                 className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {sending ? 'Getting feedback… (up to a minute)' : `Submit draft ${nextNumber}`}
+                {sending ? 'Getting feedback…' : `Submit draft ${nextNumber}`}
               </button>
               <span className="text-xs text-gray-400">{text.length} characters</span>
               {unchanged && <span className="text-xs text-gray-500">You haven&apos;t changed anything yet.</span>}
             </div>
+            {sending && <FeedbackWaiting />}
             {error && (
               <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}

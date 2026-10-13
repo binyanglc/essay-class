@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts } from '@/types';
+import { isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts, isStudentLevel } from '@/types';
 
 export async function PUT(
   request: NextRequest,
@@ -38,6 +38,10 @@ export async function PUT(
     if (isFeedbackRelease(body.feedbackRelease)) updates.feedback_release = body.feedbackRelease;
     if (isFeedbackStyle(body.feedbackStyle)) updates.feedback_style = body.feedbackStyle;
     if (isMaxDrafts(body.maxDrafts)) updates.max_drafts = body.maxDrafts;
+    // A level, or null for "not set"
+    if ('studentLevel' in body && (body.studentLevel === null || isStudentLevel(body.studentLevel))) {
+      updates.student_level = body.studentLevel;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

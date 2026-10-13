@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import FeedbackWaiting from './FeedbackWaiting';
 
 interface Props {
   classId: string;
@@ -233,11 +234,7 @@ export default function SubmissionForm({ classId, projectId }: Props) {
         {loading ? 'Submitting & generating feedback...' : 'Submit'}
       </button>
 
-      {loading && (
-        <p className="text-sm text-gray-500 animate-pulse">
-          AI is analyzing your composition. Please wait (~10-20 seconds)...
-        </p>
-      )}
+      {loading && <FeedbackWaiting />}
     </div>
   );
 }

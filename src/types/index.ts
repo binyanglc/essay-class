@@ -72,6 +72,62 @@ export function isCorrectionLevel(v: unknown): v is CorrectionLevel {
   return v === 'essential' || v === 'standard' || v === 'detailed';
 }
 
+/**
+ * The students' level (set per project by the teacher, migration v18): the AI
+ * corrects with words and grammar at this level or below. Teachers can pick
+ * the kind of course (beginner, intermediate, advanced — each stands for two
+ * HSK levels) or, if they know it, an exact level of the 2025 HSK.
+ * Not set (null) = the AI judges from the composition.
+ */
+export type HskLevel = '1' | '2' | '3' | '4' | '5' | '6' | '7-9';
+export type CourseLevel = 'beginner' | 'intermediate' | 'advanced';
+export type StudentLevel = CourseLevel | HskLevel;
+
+export const COURSE_LEVELS: { value: CourseLevel; label: string; from: HskLevel; to: HskLevel }[] = [
+  { value: 'beginner', label: 'Beginner', from: '1', to: '2' },
+  { value: 'intermediate', label: 'Intermediate', from: '3', to: '4' },
+  { value: 'advanced', label: 'Advanced', from: '5', to: '6' },
+];
+
+export const HSK_LEVELS: HskLevel[] = ['1', '2', '3', '4', '5', '6', '7-9'];
+
+export const STUDENT_LEVELS: StudentLevel[] = [...COURSE_LEVELS.map((c) => c.value), ...HSK_LEVELS];
+
+export function isStudentLevel(v: unknown): v is StudentLevel {
+  return typeof v === 'string' && (STUDENT_LEVELS as string[]).includes(v);
+}
+
+export function courseLevel(level: StudentLevel) {
+  return COURSE_LEVELS.find((c) => c.value === level);
+}
+
+/** "HSK 2", "HSK 7–9". */
+export function hskLabel(level: HskLevel): string {
+  return `HSK ${level.replace('-', '–')}`;
+}
+
+/** The HSK levels a level stands for: "HSK 1–2", "HSK 3". */
+export function hskRange(level: StudentLevel): string {
+  const c = courseLevel(level);
+  return c ? `HSK ${c.from}–${c.to}` : hskLabel(level as HskLevel);
+}
+
+/** The highest HSK level the corrections should use. */
+export function levelCeiling(level: StudentLevel): HskLevel {
+  return courseLevel(level)?.to ?? (level as HskLevel);
+}
+
+/** "a beginner", "an intermediate" (for a sentence about that kind of course or student). */
+export function withArticle(word: string): string {
+  return `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+}
+
+/** "Beginner (≈ HSK 1–2)", "HSK 7–9". */
+export function studentLevelLabel(level: StudentLevel): string {
+  const c = courseLevel(level);
+  return c ? `${c.label} (≈ ${hskRange(level)})` : hskLabel(level as HskLevel);
+}
+
 /** What students get (set per project by the teacher, migration v16). */
 export type FeedbackStyle = 'corrections' | 'hints';
 
@@ -143,6 +199,8 @@ export interface Project {
   feedback_style?: FeedbackStyle;
   /** How many drafts a student may submit for one composition: 1–3 (migration v17; default 2). */
   max_drafts?: number;
+  /** The students' HSK level, for the AI (migration v18); null = not set. */
+  student_level?: StudentLevel | null;
   created_at: string;
 }
 
@@ -200,6 +258,8 @@ export interface Feedback {
   teacher_viewed_at?: string | null;
   /** 'hints': the student never sees the corrected sentences (migration v16); null/absent = corrections. */
   feedback_style?: FeedbackStyle | null;
+  /** The students' HSK level the AI was told (migration v18); null = not set. */
+  student_level?: StudentLevel | null;
   created_at: string;
 }
 

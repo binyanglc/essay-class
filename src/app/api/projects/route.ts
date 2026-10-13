@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts } from '@/types';
+import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts, isStudentLevel } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,8 +35,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
 
-    const { classId, projectName, description, dueDate, correctionLevel, feedbackRelease, feedbackStyle, maxDrafts } =
-      await request.json();
+    const {
+      classId,
+      projectName,
+      description,
+      dueDate,
+      correctionLevel,
+      feedbackRelease,
+      feedbackStyle,
+      maxDrafts,
+      studentLevel,
+    } = await request.json();
 
     if (!classId || !projectName?.trim()) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -63,6 +72,8 @@ export async function POST(request: NextRequest) {
         feedback_release: isFeedbackRelease(feedbackRelease) ? feedbackRelease : 'immediate',
         feedback_style: isFeedbackStyle(feedbackStyle) ? feedbackStyle : 'corrections',
         max_drafts: isMaxDrafts(maxDrafts) ? maxDrafts : DEFAULT_MAX_DRAFTS,
+        // Only sent when set, so creating assignments works before migration v18
+        ...(isStudentLevel(studentLevel) ? { student_level: studentLevel } : {}),
       })
       .select()
       .single();

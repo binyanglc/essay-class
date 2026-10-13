@@ -19,6 +19,9 @@ import {
   FeedbackRelease,
   FeedbackStyle,
   DEFAULT_MAX_DRAFTS,
+  StudentLevel,
+  isStudentLevel,
+  studentLevelLabel,
 } from '@/types';
 import ClassIssues from '@/components/ClassIssues';
 import TeacherCommentThread from '@/components/TeacherCommentThread';
@@ -30,6 +33,7 @@ import HintsView from '@/components/HintsView';
 import { fetchHintView } from '@/lib/hints';
 import type { HintView } from '@/lib/hints';
 import DraftsSelect from '@/components/DraftsSelect';
+import StudentLevelSelect from '@/components/StudentLevelSelect';
 import DraftProgress, { DraftChanges } from '@/components/DraftProgress';
 import { draftDiff, draftNumber, draftProgress, groupDrafts, itemsFromRevisions } from '@/lib/drafts';
 import ErrorLabels, { ExtraLabelSections } from '@/components/ErrorLabels';
@@ -80,6 +84,7 @@ export default function ProjectDetailPage() {
   const [projReleaseDraft, setProjReleaseDraft] = useState<FeedbackRelease>('immediate');
   const [projStyleDraft, setProjStyleDraft] = useState<FeedbackStyle>('corrections');
   const [projDraftsDraft, setProjDraftsDraft] = useState(DEFAULT_MAX_DRAFTS);
+  const [projStudentLevelDraft, setProjStudentLevelDraft] = useState<StudentLevel | null>(null);
   // The draft before the open one (migration v17): its text and the corrections it had
   const [prevDraft, setPrevDraft] = useState<{ sub: Submission; revisions: SentenceRevision[] } | null>(null);
   const [showDraftChanges, setShowDraftChanges] = useState(false);
@@ -580,6 +585,10 @@ export default function ProjectDetailPage() {
     else setSaveError("Couldn't load the student view. Please try again.");
   };
 
+  // The students' HSK level for the AI (migration v18); null = not set
+  const projectLevel = project?.student_level;
+  const currentStudentLevel: StudentLevel | null = isStudentLevel(projectLevel) ? projectLevel : null;
+
   const handleEditProject = async () => {
     if (!projNameDraft.trim()) return;
     const res = await fetch(`/api/projects/${projectId}`, {
@@ -593,6 +602,8 @@ export default function ProjectDetailPage() {
         feedbackRelease: projReleaseDraft,
         feedbackStyle: projStyleDraft,
         maxDrafts: projDraftsDraft,
+        // Only when changed (so saving works the same before migration v18)
+        ...(projStudentLevelDraft !== currentStudentLevel ? { studentLevel: projStudentLevelDraft } : {}),
       }),
     });
     if (res.ok) {
@@ -675,6 +686,12 @@ export default function ProjectDetailPage() {
               onChange={setProjStyleDraft}
               existingProject
             />
+            <StudentLevelSelect
+              id="project-student-level"
+              value={projStudentLevelDraft}
+              onChange={setProjStudentLevelDraft}
+              existingProject
+            />
             <CorrectionLevelSelect
               id="project-correction-level"
               value={projLevelDraft}
@@ -718,6 +735,7 @@ export default function ProjectDetailPage() {
                   setProjReleaseDraft(project.feedback_release ?? 'immediate');
                   setProjStyleDraft(project.feedback_style ?? 'corrections');
                   setProjDraftsDraft(project.max_drafts ?? DEFAULT_MAX_DRAFTS);
+                  setProjStudentLevelDraft(currentStudentLevel);
                 }}
                 className="text-xs text-gray-400 hover:text-blue-600"
                 title="Edit project"
@@ -735,6 +753,7 @@ export default function ProjectDetailPage() {
             )}
             <p className="text-xs mt-1 text-gray-400">
               Feedback: {FEEDBACK_STYLES.find((st) => st.value === (project.feedback_style ?? 'corrections'))?.label}
+              {' '}&middot; Level: {currentStudentLevel ? studentLevelLabel(currentStudentLevel) : 'not set'}
               {' '}&middot; AI checking:{' '}
               {CORRECTION_LEVELS.find((l) => l.value === (project.correction_level ?? 'standard'))?.label}
               {' '}&middot; Students see the feedback:{' '}

@@ -7,8 +7,8 @@ import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
 import { prepareHintFeedback, withMarks } from '@/lib/hints';
 import { joinWrappedLines } from '@/lib/text-layout';
-import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isMaxDrafts } from '@/types';
-import type { CorrectionLevel, FeedbackStyle } from '@/types';
+import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isMaxDrafts, isStudentLevel } from '@/types';
+import type { CorrectionLevel, FeedbackStyle, StudentLevel } from '@/types';
 
 // Feedback and labelling are two AI calls in a row; models that think first
 // (e.g. gpt-6-luna) can take 30–50 s. 300 s is the Hobby maximum with Fluid compute.
@@ -119,12 +119,11 @@ export async function POST(request: NextRequest) {
     let holdForReview = false;
     // "Hints only": the student never sees the corrected sentences (migration v16)
     let feedbackStyle: FeedbackStyle = 'corrections';
+    // The students' HSK level, so corrections stay within it (migration v18); null = not set
+    let studentLevel: StudentLevel | null = null;
     if (projectId) {
-      const { data: project } = await supabase
-        .from('projects')
-        .select('class_id, project_name, correction_level, feedback_release, feedback_style')
-        .eq('id', projectId)
-        .single();
+      // All columns: settings from newer migrations are simply absent until those are run
+      const { data: project } = await supabase.from('projects').select('*').eq('id', projectId).single();
       // The project's settings (e.g. "hints only") can't be dodged by naming another class's project
       if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
       if (project.class_id !== classId) {
@@ -134,6 +133,7 @@ export async function POST(request: NextRequest) {
       if (isCorrectionLevel(project.correction_level)) correctionLevel = project.correction_level;
       holdForReview = project.feedback_release === 'after_review';
       if (project.feedback_style === 'hints' || keepHints) feedbackStyle = 'hints';
+      if (isStudentLevel(project.student_level)) studentLevel = project.student_level;
     }
 
     const { data: submission, error: subError } = await supabase
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
         errorPatterns,
         previousCount ?? 0,
         correctionLevel,
-        { style: feedbackStyle }
+        { style: feedbackStyle, studentLevel }
       );
     } catch (aiError) {
       console.error('AI feedback error:', aiError);
@@ -227,6 +227,7 @@ export async function POST(request: NextRequest) {
       correction_level: correctionLevel,
       released_at: holdForReview ? null : new Date().toISOString(),
       feedback_style: feedbackStyle,
+      ...(studentLevel ? { student_level: studentLevel } : {}),
     });
     if (feedbackError) console.error('Feedback insert error:', feedbackError);
     const feedbackSaved = !feedbackError;
@@ -240,6 +241,7 @@ export async function POST(request: NextRequest) {
         submission_id: submission.id,
         model: feedbackModel(),
         correction_level: correctionLevel,
+        ...(studentLevel ? { student_level: studentLevel } : {}),
         content: aiRaw,
       });
       if (originalError) console.error('Saving the original AI feedback failed:', originalError);

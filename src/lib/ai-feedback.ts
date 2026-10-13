@@ -1,5 +1,6 @@
 import { AIFeedbackResponse, CorrectionLevel, ErrorPattern } from '@/types';
-import type { FeedbackStyle } from '@/types';
+import { courseLevel, hskLabel, hskRange, levelCeiling, withArticle } from '@/types';
+import type { FeedbackStyle, StudentLevel } from '@/types';
 import { samplingParams, usageFrom } from './ai-models';
 import type { AiUsage, ReasoningEffort } from './ai-models';
 
@@ -16,6 +17,8 @@ export interface FeedbackOptions {
   onUsage?: (usage: AiUsage) => void;
   /** "hints": the student won't see the corrections — also write a hint per correction, and no answers in comments. */
   style?: FeedbackStyle;
+  /** The students' HSK level (migration v18): correct with words and grammar at this level or below. */
+  studentLevel?: StudentLevel | null;
 }
 
 /** Which model writes the feedback: option → OPENAI_FEEDBACK_MODEL → default. */
@@ -31,6 +34,39 @@ const LEVEL_RULES: Record<CorrectionLevel, string> = {
   detailed:
     "DETAILED — correct all mistakes, and also improve phrasing that is grammatical but sounds unnatural or translated from English, using words the student likely knows. Keep the student's ideas and sentence structure.",
 };
+
+const LEVEL_DESCRIPTIONS: Record<StudentLevel, string> = {
+  '1': 'a beginner who knows only basic words and grammar',
+  '2': 'a beginner who knows only basic words and grammar',
+  '3': 'an intermediate learner',
+  '4': 'an intermediate learner',
+  '5': 'an upper-intermediate learner',
+  '6': 'an upper-intermediate learner',
+  '7-9': 'an advanced learner',
+  beginner: 'a beginner who knows only basic words and grammar',
+  intermediate: 'an intermediate learner',
+  advanced: 'an advanced learner',
+};
+
+/**
+ * The students' level, when the teacher set one: corrections stay within it,
+ * so a basic composition isn't "upgraded" with words the student hasn't
+ * learned. Without a level the prompt is exactly as before.
+ */
+export function levelRules(studentLevel: StudentLevel): string {
+  // A kind of course stands for two HSK levels; corrections stay within the higher one
+  const hsk = hskLabel(levelCeiling(studentLevel));
+  const course = courseLevel(studentLevel);
+  const level = course ? `${withArticle(course.label.toLowerCase())} course, roughly ${hskRange(studentLevel)}` : hsk;
+  return `STUDENT LEVEL: ${level} on the new 9-level HSK (HSK 3.0, 2025 syllabus) — ${LEVEL_DESCRIPTIONS[studentLevel]}. Match every correction to this level:
+1. Keep the student's own words and sentence patterns whenever they can be made correct, even words above ${hsk} that the student chose.
+2. When you must add or replace a word, use the simplest word that fixes the problem, at ${hsk} or below, even if a more advanced word would sound more natural.
+3. Use only grammar patterns at ${hsk} or below. Do not add patterns the student has probably not learned yet.
+4. Do not revise a sentence just to use more advanced words or patterns: a correct sentence with simple words is good writing at this level.
+5. If nothing at ${hsk} or below can fix a problem, use the simplest option and say in the explanation that it is a new word or pattern, with its pinyin and meaning.
+6. Write explanations and comments in plain English that a student at this level can follow.
+These rules take priority over any example in this prompt that uses more advanced words or patterns.`;
+}
 
 export async function generateFeedback(
   text: string,
@@ -60,7 +96,7 @@ STUDENT'S COMPOSITION:
 ${text}
 ${historyContext}
 
-CORRECTION LEVEL: ${LEVEL_RULES[level]}
+CORRECTION LEVEL: ${LEVEL_RULES[level]}${opts.studentLevel ? `\n\n${levelRules(opts.studentLevel)}` : ''}
 
 Return a JSON object with this EXACT structure:
 
