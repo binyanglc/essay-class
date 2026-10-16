@@ -116,3 +116,44 @@ export function clauseBefore(text: string, at: number): string {
 export function isLeAfterMei(original: string, change: PositionedChange): boolean {
   return coreOf(change.learner, change.target).learner === '了' && /没/.test(clauseBefore(original, change.at + change.learner.indexOf('了')));
 }
+
+/**
+ * When a character swap turns one real word into another (权力 → 权利,
+ * 严厉 → 严格), the problem is the word, not the character: the student's
+ * word and the right word, both of 2–4 characters and both real words
+ * (`isWord`), or null. A swap that leaves no real word (怀处 → 坏处, 不旦 →
+ * 不但) is a character error, and so is a one-character word (在 → 再).
+ */
+export function wholeWords(
+  original: string,
+  change: PositionedChange,
+  isWord: (word: string) => boolean
+): { learner: string; target: string } | null {
+  const { learner, target } = change;
+  let pre = 0;
+  while (pre < learner.length && pre < target.length && learner[pre] === target[pre]) pre++;
+  let suf = 0;
+  while (
+    suf < learner.length - pre &&
+    suf < target.length - pre &&
+    learner[learner.length - 1 - suf] === target[target.length - 1 - suf]
+  )
+    suf++;
+  const wrong = learner.slice(pre, learner.length - suf);
+  const right = target.slice(pre, target.length - suf);
+  if (!wrong || !right || wrong.length !== right.length) return null;
+  const start = change.at + pre;
+  const end = start + wrong.length;
+  if (original.slice(start, end) !== wrong) return null;
+  // The longest word around the swapped characters that is still a word once they are swapped
+  for (let len = 4; len >= 2; len--) {
+    for (let s = Math.max(0, end - len); s <= start && s + len <= original.length; s++) {
+      const word = original.slice(s, s + len);
+      const fixed = original.slice(s, start) + right + original.slice(end, s + len);
+      if (word !== fixed && CJK_WORD.test(word) && isWord(word) && isWord(fixed)) return { learner: word, target: fixed };
+    }
+  }
+  return null;
+}
+
+const CJK_WORD = /^[\u3400-\u9fff]+$/;

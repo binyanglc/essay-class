@@ -13,6 +13,7 @@ import { LABELS_TIP, LabelChip, LabelEditor, LabelsTip, RemoveReasonPrompt, chan
 import { useTipDismissed } from '@/lib/tips';
 import { MAX_HINT } from '@/lib/hints';
 import HintText from './HintText';
+import { labelWord } from '@/lib/label-word';
 import type { LabelSuggestion, TagChip } from './LabelControls';
 
 export type { LabelSuggestion, TagChip } from './LabelControls';
@@ -108,6 +109,7 @@ export default function RevisionInspector(props: Props) {
         <LabelChip
           key={t.id ?? `${t.code ?? t.error_type}-${t.pattern_name}`}
           tag={t}
+          word={labelWord(t, item.original, item.revised)}
           onRemove={canEdit && props.onRemoveTag && t.id ? () => setRemoving(t.id!) : undefined}
           onEdit={canLabel && props.onUpdateTag && t.id ? () => setLabelEditing(t.id!) : undefined}
           onConfirm={

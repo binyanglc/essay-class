@@ -99,6 +99,7 @@ export function domainStyle(errorType: string) {
 export function LabelChip({
   tag,
   count,
+  word,
   onEdit,
   onConfirm,
   onRemove,
@@ -106,13 +107,15 @@ export function LabelChip({
   tag: TagChip;
   /** Shows "Grammar 3" instead of the label's name. */
   count?: number;
+  /** The word a wrong character belongs in (lib/label-word): "坏 ← 怀 · in 坏处". */
+  word?: string;
   onEdit?: () => void;
   onConfirm?: () => void;
   onRemove?: () => void;
 }) {
   const style = domainStyle(tag.error_type);
   const unchecked = count === undefined && isUnconfirmedAi(tag);
-  const text = count !== undefined ? `${style.label} ${count}` : tagLabel(tag);
+  const text = count !== undefined ? `${style.label} ${count}` : `${tagLabel(tag)}${word ? ` · in ${word}` : ''}`;
   const notes: string[] = [];
   if (unchecked) notes.push('AI suggestion — not yet checked by the teacher');
   else if (count === undefined && isConfirmed(tag)) {

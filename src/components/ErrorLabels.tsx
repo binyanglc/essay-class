@@ -8,6 +8,10 @@ import type { DeleteReason, Nature } from '@/lib/error-taxonomy';
 import type { ErrorTag } from '@/types';
 import { NumberBadge } from './TrackChangesView';
 import { RemoveReasonPrompt } from './LabelControls';
+import { labelWord } from '@/lib/label-word';
+
+/** The word a wrong character belongs in, from the label's own sentence. */
+const wordOf = (t: ErrorTag) => labelWord(t, t.original_text, t.suggested_revision);
 
 /** Small marks after a label's name: AI suggestion not checked yet, not an error. */
 function Marks({ tag }: { tag: ErrorTag }) {
@@ -77,6 +81,7 @@ export default function ErrorLabels({
                 >
                   <NumberBadge n={link.n} raised={false} />
                   {tagLabel(t)}
+                  {wordOf(t) && <span className="text-gray-500">· in {wordOf(t)}</span>}
                   <Marks tag={t} />
                 </button>
                 {onRemove && (

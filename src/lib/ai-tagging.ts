@@ -40,7 +40,8 @@ import {
   ruleForCode,
 } from './error-taxonomy';
 import type { Nature, Operation, Severity } from './error-taxonomy';
-import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind } from './label-rules';
+import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind, wholeWords } from './label-rules';
+import { isHskWord } from './hsk-words-2025';
 import type { PositionedChange, RuleKind } from './label-rules';
 import { samplingParams, usageFrom } from './ai-models';
 import {
@@ -227,7 +228,7 @@ MISUSE RULES (optional detail for some grammar codes — use one only when it cl
 ${rulesText()}
 
 HOW TO DECIDE
-1. A wrong character with the same or similar sound → CHAR.SOUND; similar shape → CHAR.SHAPE (even if the wrong character is also a word, e.g. 在/再, 做/作, 那/哪). Exception: 的/地/得 → GRAM.DE.
+1. A wrong character with the same or similar sound → CHAR.SOUND; similar shape → CHAR.SHAPE (even if the wrong character on its own is also a word, e.g. 在/再, 做/作). Exception: 的/地/得 → GRAM.DE. But when what the student wrote is itself a real word of two or more characters with another meaning (权力 for 权利, 严厉 for 严格), it is a word problem → VOC.CHOICE: quote both whole words.
 2. Adding or removing 了 is ALWAYS GRAM.LE (never GRAM.NEG or GRAM.CONSTIT). With 没 in the clause, the rule is R.LE.NEG.
 3. Missing/extra/swapped characters: if what the student wrote is not a word (图馆) → CHAR.INWORD; if it is another real word (兴趣 → 感兴趣) → a vocabulary or grammar code.
 4. If the fix introduces or removes a construction (把, 被, 是……的, 比), use that construction's code even if 了 etc. also changed.
@@ -389,6 +390,14 @@ function matchChange(
   return sameKind[0];
 }
 
+/** The change a label's quoted words are about (the only change when there is just one). */
+function changeQuoted(rev: RevisionForTagging, changes: PositionedChange[], learner: string): PositionedChange | undefined {
+  if (changes.length === 1) return changes[0];
+  const p = learner ? rev.original.indexOf(learner) : -1;
+  if (p < 0) return undefined;
+  return changes.find((c) => c.at >= p && c.at < p + learner.length) ?? changes.find((c) => c.at + c.learner.length > p && c.at <= p + learner.length);
+}
+
 function row(
   rev: RevisionForTagging,
   code: string,
@@ -501,12 +510,14 @@ export function checkLabels(
     // Changes that can only mean one thing get the rule's label
     const kind = ruleKind(learner, target);
     let at = -1;
+    let matched: PositionedChange | undefined;
     if (kind) {
       const change = matchChange(rev, changes, used.get(rev.id)!, learner, kind) ?? {
         learner,
         target,
         at: Math.max(0, rev.original.indexOf(learner)),
       };
+      matched = change;
       used.get(rev.id)!.add(change);
       at = change.at;
       const fixed = ruleBased(rev, change, kind, l.rule);
@@ -515,6 +526,20 @@ export function checkLabels(
       rule = fixed.rule;
       learner = fixed.learner;
       target = fixed.target;
+    }
+
+    // A real word swapped for another (权力 → 权利, 严厉 → 严格) is a word choice, not a
+    // character error: label it with both whole words (agreed with the site owner 2026-10-16)
+    if (code.code === 'CHAR.SOUND' || code.code === 'CHAR.SHAPE') {
+      const change = matched ?? changeQuoted(rev, changes, learner);
+      const words = change && wholeWords(rev.original, change, isHskWord);
+      if (words) {
+        aiOriginal.overridden_by_rule = 'WORD';
+        code = getCode('VOC.CHOICE')!;
+        rule = null;
+        learner = words.learner;
+        target = words.target;
+      }
     }
 
     let nature: Nature = isNature(l.nature) ? l.nature : defaultNature(code.code);
