@@ -1,12 +1,13 @@
 /**
  * "Hints only" feedback (migration v16): the student sees where each problem
- * is, what kind it is and a short hint — never the corrected sentence.
+ * is, what kind it is, a hint and usage & examples — never the corrected
+ * sentence — and rewrites it themselves.
  *
  * The AI still writes full corrections (the teacher reviews them). On the
  * server we work out *where* each correction changes the student's words
- * ("marks"), make sure the AI's hints and comments never show a corrected
- * sentence (they may name the right word or pattern), and the database
- * (feedback_hints) hands students only the safe parts.
+ * ("marks"), and the database (feedback_hints) hands students only those,
+ * the explanation ("Hint"), the usage & examples and the comments — never
+ * the corrected sentence itself.
  *
  * Pure functions, no React.
  */
@@ -52,8 +53,12 @@ export function hintMarks(original: string, revised: string): HintMark[] {
   if (groups.length === 0) return [];
 
   // Something deleted in one place and inserted in another: word order
+  // (two words swapped for each other, 权力 ↔ 权利, are two wrong words, not a move)
   const moved = groups.some(
-    (g) => g.deleted.trim() && groups.some((h) => h !== g && h.inserted.trim() === g.deleted.trim())
+    (g) =>
+      g.deleted.trim() &&
+      !g.inserted.trim() &&
+      groups.some((h) => h !== g && !h.deleted.trim() && h.inserted.trim() === g.deleted.trim())
   );
   if (moved) {
     const start = Math.min(...groups.map((g) => g.start));
@@ -88,94 +93,15 @@ export function kindsOf(marks: HintMark[] | undefined): HintKind[] {
 }
 
 // ---------------------------------------------------------------------------
-// Keeping the corrected sentence out of hints and comments
+// What the student is told
 // ---------------------------------------------------------------------------
 //
-// A hint may name the right word, character or pattern — "严厉 vs 严格: …",
-// "不但 A，而且 B", "正在 + verb" — because that is what the student needs to
-// learn (the teacher asked for hints specific enough to act on). What it must
-// not do is show the student's own sentence corrected: the right words put
-// back among the student's other words ("控制越来越严格", "正在成长"). Putting
-// them together is the student's job.
-
-/** Characters of the corrected sentence that, joining a change to the student's own words, show it corrected. */
-const WINDOW = 4;
-/** This many new characters in a row are a corrected phrase, not a word to learn. */
-const NEW_PHRASE = 6;
-
-/** Spaces, punctuation and symbols: left out when comparing, so "越来越**严格**" or "很累了, 我想" still count. */
-const SEPARATOR = /[\s\p{P}\p{S}]/u;
-const SEPARATORS = /[\s\p{P}\p{S}]+/gu;
-/** Glosses in brackets without Chinese ("(yángé)", "(strict)") and pinyin with tone marks ("yángé"). */
-const GLOSS = /[(（][^()（）\u3400-\u9fff]*[)）]/g;
-// (no lookbehind: this file also runs in students' browsers, and older Safari can't parse one)
-const PINYIN_WORD = /(^|[^A-Za-z\u00C0-\u024F])[A-Za-z\u00C0-\u024F]*[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ][A-Za-z\u00C0-\u024F]*/g;
-
-/** A hint or comment as it is compared with corrected stretches: only its words, no separators or pinyin. */
-function compareForm(text: string): string {
-  return text.replace(GLOSS, ' ').replace(PINYIN_WORD, '$1 ').replace(SEPARATORS, '');
-}
-
-/**
- * The stretches of the corrected sentence that would show the answer in place
- * (spaces and punctuation left out): every WINDOW characters that join
- * something the correction changed (new text, or a place where text was taken
- * out) to the student's own words, and every NEW_PHRASE characters of new
- * text — unless the student wrote that stretch themselves (`own`, by default
- * the original sentence).
- */
-export function correctedStretches(original: string, revised: string, own: string = original): string[] {
-  if (!original || original === revised) return [];
-  // Each character of `revised` that counts: new or the student's, and whether something changed just before it
-  const chars: string[] = [];
-  const isNew: boolean[] = [];
-  const cutBefore: boolean[] = [];
-  let cut = false;
-  for (const op of diffChars(original, revised)) {
-    if (op.type === 'delete') {
-      cut = true;
-      continue;
-    }
-    for (const ch of op.text) {
-      if (SEPARATOR.test(ch)) {
-        if (op.type === 'insert') cut = true; // added punctuation is a change between the characters around it
-        continue;
-      }
-      chars.push(ch);
-      isNew.push(op.type === 'insert');
-      cutBefore.push(cut);
-      cut = false;
-    }
-  }
-  const ownWords = own.replace(SEPARATORS, '');
-  const out = new Set<string>();
-  const add = (s: number, e: number) => {
-    const w = chars.slice(s, e).join('');
-    if (!ownWords.includes(w)) out.add(w);
-  };
-  const n = chars.length;
-  for (let s = 0; s + WINDOW <= n; s++) {
-    let changed = false;
-    let student = false;
-    for (let i = s; i < s + WINDOW; i++) {
-      if (isNew[i]) changed = true;
-      else student = true;
-      if (i > s && cutBefore[i]) changed = true;
-    }
-    if (changed && student) add(s, s + WINDOW);
-  }
-  for (let s = 0; s + NEW_PHRASE <= n; s++) {
-    if (isNew.slice(s, s + NEW_PHRASE).every(Boolean)) add(s, s + NEW_PHRASE);
-  }
-  return [...out];
-}
-
-/** Whether `text` shows any of `stretches`, whatever is put between the characters (spaces, quotes, "+", pinyin…). */
-function showsAny(text: string, stretches: string[]): boolean {
-  if (!stretches.length) return false;
-  const words = compareForm(text);
-  return stretches.some((w) => words.includes(w));
-}
+// The student sees the AI's explanation (as "Hint") and its usage & examples
+// as they are: nothing is taken out. The teacher's decision (2026-10-16): in
+// "hints only" the student still has to rewrite the sentence, so a specific
+// hint teaches more than it gives away; checking for the corrected sentence
+// took out the most useful explanations. The AI is still asked not to write
+// the corrected sentence, and the teacher can edit everything before release.
 
 const FALLBACK: Record<HintKind, string> = {
   missing: 'Something is missing at the marked place.',
@@ -184,14 +110,13 @@ const FALLBACK: Record<HintKind, string> = {
   order: 'Look again at the word order here.',
 };
 
-/** A hint that says nothing about the answer, for when every point of the AI's hint gave it away. */
+/** A plain hint about the kind of problem, for when the AI wrote neither an explanation nor a hint. */
 export function fallbackHint(marks: HintMark[] | undefined): string {
   return FALLBACK[kindsOf(marks)[0] ?? 'wrong'];
 }
 
-/** Longest hint kept (all points together), and longest single point. */
-export const MAX_HINT = 800;
-const MAX_POINT = 300;
+/** Longest hint kept (all problems together). */
+export const MAX_HINT = 3000;
 
 /** Numbers and bullets at the start of a point: "(1)", "（1）", "1.", "①", "•", "-". */
 const POINT_NUMBER = /^\s*(?:[(（]\d{1,2}[)）]|\d{1,2}[.)、．]|[①-⑳]|[•·*\-–—])\s*/;
@@ -208,8 +133,9 @@ const NEXT_POINT =
  * or markdown bold. Points written on one line are split too: numbered
  * "(1) … (2) …", or "X: …; Y: …".
  */
-export function hintPoints(hint: string | null | undefined): string[] {
-  return (hint ?? '')
+export function hintPoints(hint: string | readonly string[] | null | undefined): string[] {
+  const text = Array.isArray(hint) ? hint.filter((h) => typeof h === 'string').join('\n') : typeof hint === 'string' ? hint : '';
+  return text
     .replace(/\\n/g, '\n') // a line break the model escaped twice
     .replace(/\*\*|__/g, '')
     .split(/\r?\n+/)
@@ -221,111 +147,163 @@ export function hintPoints(hint: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-/** A point cut to MAX_POINT characters, at the end of a sentence if there is one. */
-function clipPoint(point: string): string {
-  if (point.length <= MAX_POINT) return point;
-  const head = point.slice(0, MAX_POINT);
-  const end = Math.max(...['. ', '; ', '。', '；'].map((m) => head.lastIndexOf(m)));
-  return end > MAX_POINT / 3 ? head.slice(0, end + 1).trim() : `${head.slice(0, MAX_POINT - 1).trim()}…`;
+// ---------------------------------------------------------------------------
+// "Usage & examples" (the hint, from v19): for each problem, the right word or
+// pattern, a word to compare it with, phrases and an example sentence — each
+// with pinyin and English. Stored as plain text the teacher can edit:
+//
+//   表示的看法:
+//   → 同意 (tóngyì) — to agree
+//   vs 表示 (biǎoshì) — to express, to show
+//   • 同意……的看法 (tóngyì … de kànfǎ) — agree with …'s view
+//   Example: 我同意老师的看法。(Wǒ tóngyì lǎoshī de kànfǎ.) — I agree with the teacher's view.
+//
+// One block per problem, blocks separated by an empty line. Older hints (one
+// line per problem) are shown as before.
+// ---------------------------------------------------------------------------
+
+/** A Chinese word, phrase or sentence with its pinyin and English. */
+export interface UsageEntry {
+  zh: string;
+  pinyin: string;
+  en: string;
 }
 
-/** Whether a hint (or one point of it) shows this sentence corrected. */
-export function hintGivesAnswer(rev: Pick<SentenceRevision, 'original' | 'revised'>, hint: string): boolean {
-  return showsAny(hint, correctedStretches(rev.original, rev.revised));
+/** Usage & examples for one problem. */
+export interface UsageBlock {
+  /** The student's words it is about ("表示的看法", "Before 跑步"). */
+  about: string;
+  right: UsageEntry | null;
+  compare: UsageEntry | null;
+  phrases: UsageEntry[];
+  example: UsageEntry | null;
+  /** Lines in no known shape (a teacher's own note): shown as they are. */
+  other: string[];
 }
 
-/**
- * The AI's hint with any point that shows the sentence corrected taken out
- * (or, with `others`, another corrected sentence), one point per line. If
- * nothing is left, a plain hint about the kind of problem.
- */
-export function safeHint(
-  rev: Pick<SentenceRevision, 'original' | 'revised' | 'hint' | 'marks'>,
-  others: string[] = []
-): string {
-  const points = hintPoints(rev.hint);
-  if (!points.length) return '';
-  const stretches = [...correctedStretches(rev.original, rev.revised), ...others];
-  const kept: string[] = [];
+const oneLine = (v: unknown, max = 200) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+function toEntry(v: unknown): UsageEntry | null {
+  if (typeof v === 'string') return oneLine(v) ? { zh: oneLine(v), pinyin: '', en: '' } : null;
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const zh = oneLine(o.zh);
+  if (!zh) return null;
+  return { zh, pinyin: oneLine(o.pinyin).replace(/^\(|\)$/g, ''), en: oneLine(o.en) };
+}
+
+/** "同意 (tóngyì) — to agree" */
+export function entryText(e: UsageEntry): string {
+  return `${e.zh}${e.pinyin ? ` (${e.pinyin})` : ''}${e.en ? ` — ${e.en}` : ''}`;
+}
+
+/** "同意 (tóngyì) — to agree" → its parts (what doesn't fit the shape is all Chinese). */
+export function parseEntry(line: string): UsageEntry {
+  const t = line.trim();
+  const full = t.match(/^(.*?)\s*[(（]([^()（）]*)[)）]\s+[—–-]\s+(.+)$/);
+  if (full && full[1]) return { zh: full[1].trim(), pinyin: full[2].trim(), en: full[3].trim() };
+  const noPinyin = t.match(/^(.*?)\s+[—–-]\s+(.+)$/);
+  if (noPinyin && noPinyin[1]) return { zh: noPinyin[1].trim(), pinyin: '', en: noPinyin[2].trim() };
+  const noEn = t.match(/^(.*?)\s*[(（]([^()（）]*)[)）]$/);
+  if (noEn && noEn[1]) return { zh: noEn[1].trim(), pinyin: noEn[2].trim(), en: '' };
+  return { zh: t, pinyin: '', en: '' };
+}
+
+/** The AI's usage & examples (one object per problem) as the text that is saved. */
+export function formatUsage(items: readonly unknown[]): string {
+  const blocks: string[] = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      if (item.trim()) blocks.push(item.trim());
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const right = toEntry(o.right);
+    const compare = toEntry(o.compare);
+    const phrases = (Array.isArray(o.phrases) ? o.phrases : []).map(toEntry).filter((e): e is UsageEntry => !!e).slice(0, 4);
+    const example = toEntry(o.example);
+    if (!right && !phrases.length && !example) continue;
+    const about = oneLine(o.student_words, 40).replace(/[:：]$/, '');
+    blocks.push(
+      [
+        about && `${about}:`,
+        right && `→ ${entryText(right)}`,
+        compare && `vs ${entryText(compare)}`,
+        ...phrases.map((p) => `• ${entryText(p)}`),
+        example && `Example: ${entryText(example)}`,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    );
+  }
+  return blocks.join('\n\n');
+}
+
+const USAGE_LINE = /^\s*(?:→|vs\s|•\s|Example:)/im;
+
+/** Whether a hint is "usage & examples" (from v19) rather than the older one line per problem. */
+export function isUsage(text: string | null | undefined): boolean {
+  return !!text && USAGE_LINE.test(text);
+}
+
+/** Usage & examples text → one block per problem, for display. */
+export function usageBlocks(text: string): UsageBlock[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((chunk) => {
+      const block: UsageBlock = { about: '', right: null, compare: null, phrases: [], example: null, other: [] };
+      chunk
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .forEach((line, i) => {
+          let m: RegExpMatchArray | null;
+          if ((m = line.match(/^→\s*(.+)$/))) block.right = parseEntry(m[1]);
+          else if ((m = line.match(/^vs\.?\s+(.+)$/i))) block.compare = parseEntry(m[1]);
+          else if ((m = line.match(/^[•·\-*]\s*(.+)$/))) block.phrases.push(parseEntry(m[1]));
+          else if ((m = line.match(/^(?:Example|e\.g\.|例)[:：]?\s*(.+)$/i))) block.example = parseEntry(m[1]);
+          else if (i === 0 && /[:：]$/.test(line)) block.about = line.replace(/[:：]$/, '');
+          else block.other.push(line);
+        });
+      return block;
+    })
+    .filter((b) => b.right || b.compare || b.phrases.length || b.example || b.other.length);
+}
+
+/** A hint as it is saved: usage & examples cut to whole blocks, an older-style hint to whole points. */
+export function tidyHint(hint: string | null | undefined): string {
+  const text = (hint ?? '').trim();
+  if (!text) return '';
+  const parts = isUsage(text) ? text.split(/\n\s*\n/).map((b) => b.trim()) : hintPoints(text);
+  const out: string[] = [];
   let length = 0;
-  for (const p of points) {
-    if (showsAny(p, stretches)) continue;
-    const point = clipPoint(p);
-    if (length + point.length > MAX_HINT) break;
-    kept.push(point);
-    length += point.length + 1;
+  for (const part of parts) {
+    if (!part || length + part.length > MAX_HINT) break;
+    out.push(part);
+    length += part.length + 2;
   }
-  return kept.length ? kept.join('\n') : fallbackHint(rev.marks);
+  return out.join(isUsage(text) ? '\n\n' : '\n');
 }
 
 /**
- * What would show corrected sentences in a comment (or in another sentence's
- * hint): the stretches of every corrected sentence that the student didn't
- * write anywhere in the composition.
+ * Prepares the AI's corrections for a "hints only" assignment: where each
+ * problem is (marks), the explanation shared with the student, and the usage
+ * & examples. With neither, a plain hint about the kind of problem.
  */
-export function commentLeaks(text: string, revisions: Pick<SentenceRevision, 'original' | 'revised'>[]): string[] {
-  const out = new Set<string>();
-  for (const r of revisions) for (const w of correctedStretches(r.original, r.revised, text)) out.add(w);
-  return [...out];
-}
-
-// A list of corrections rather than an explanation: "Replace 要 with 希望", "'的' should be '得'",
-// "完 → 结束", "改成…". Explaining a word or a rule ("Use 严格 for rules", "昨天 should be placed
-// before the verb") is fine.
-const CORRECTION_WORDING = [
-  /[\u3400-\u9fff][^\u3400-\u9fff]{0,8}(?:→|->|=>|⇒)[^\u3400-\u9fff]{0,8}[\u3400-\u9fff]/,
-  /\b(?:chang|replac|correct|rewrit|fix)\w*\b[^.!?。！？]*?[\u3400-\u9fff][^.!?。！？]*?\b(?:to|with|into|as)\b[^\u3400-\u9fff.!?。！？]{0,8}[\u3400-\u9fff]/i,
-  /[\u3400-\u9fff][^\u3400-\u9fff]{0,6}\bshould (?:be|read)\b[^\u3400-\u9fff]{0,6}[\u3400-\u9fff]/i,
-  /(?:改成|改为|换成|应该是|应为|应改)[^\u3400-\u9fff]{0,4}[\u3400-\u9fff]/,
-];
-// A sentence, with the closing quote or bracket after its full stop ("… such as '严格.' Next …")
-const SENTENCE = /[^.!?。！？]+[.!?。！？]*(?:[’”」』）)]|['"](?=[\s)）]|$))*\s*/g;
-
-/** Drops the sentences of a comment that show any of `leaks`, or that list a correction. */
-export function scrubComment(comment: string, leaks: string[]): string {
-  if (!comment) return comment;
-  const sentences = comment.match(SENTENCE) ?? [comment];
-  return sentences
-    .filter((s) => !showsAny(s, leaks) && !CORRECTION_WORDING.some((re) => re.test(s)))
-    .join('')
-    .trim();
-}
-
-const COMMENT_FIELDS = [
-  'overall_comment',
-  'characters_comment',
-  'vocabulary_comment',
-  'grammar_comment',
-  'content_feedback',
-  'structure_feedback',
-] as const;
-type CommentField = (typeof COMMENT_FIELDS)[number];
-
-/**
- * Prepares the AI's feedback for a "hints only" assignment: hints and
- * comments without anything that shows a corrected sentence.
- */
-export function prepareHintFeedback<C extends Partial<Record<CommentField, string>>, R extends SentenceRevision>(
-  text: string,
-  comments: C,
-  revisions: R[]
-): { comments: C; revisions: R[] } {
-  const marked = withMarks(revisions);
-  const leaks = commentLeaks(text, marked);
-  const cleanComments = { ...comments };
-  for (const f of COMMENT_FIELDS) {
-    const v = comments[f];
-    if (typeof v === 'string') (cleanComments as Record<string, string>)[f] = scrubComment(v, leaks);
-  }
-  // A hint may not show its own sentence corrected, nor any other (the student sees them all)
-  return { comments: cleanComments, revisions: marked.map((r) => ({ ...r, hint: safeHint(r, leaks) })) };
+export function prepareHintFeedback<R extends SentenceRevision>(revisions: R[]): R[] {
+  return withMarks(revisions).map((r) => {
+    const explanation = (r.explanation ?? '').trim();
+    const hint = tidyHint(r.hint);
+    return { ...r, explanation, hint: hint || (explanation ? '' : fallbackHint(r.marks)), whyShared: true };
+  });
 }
 
 // ---------------------------------------------------------------------------
 // What the student gets (from the database function feedback_hints)
 // ---------------------------------------------------------------------------
 
-/** One problem, as the student sees it: no corrected sentence, no explanation. */
+/** One problem, as the student sees it: never the corrected sentence. */
 export interface HintItem {
   id: string;
   /** The student's words; missing when the correction wasn't found in the composition. */
@@ -335,6 +313,8 @@ export interface HintItem {
   source?: 'ai' | 'teacher';
   commentKey?: string;
   hint?: string;
+  /** Why it is wrong (the explanation), when the student may see it (migration v19). */
+  why?: string;
   marks?: HintMark[];
 }
 

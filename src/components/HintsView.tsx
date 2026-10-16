@@ -149,9 +149,10 @@ export default function HintsView({
 
       {ordered.length > 0 ? (
         <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2.5 text-sm leading-relaxed text-blue-900">
-          {preview ? 'This is what the student sees.' : 'Your teacher wants you to fix these yourself.'} The marks show
-          where each problem is; the hints below explain the word, character or pattern you need. Then rewrite the
-          sentences yourself.
+          {preview ? 'This is what the student sees.' : 'Your teacher wants you to fix these yourself.'}{' '}
+          The marks show
+          where each problem is; below each one you&apos;ll find a hint and, for most, usage and examples. Then
+          rewrite the sentences yourself.
         </p>
       ) : (
         <p className="mb-3 rounded-lg bg-green-50 px-3 py-2.5 text-sm text-green-800">Nothing to fix — well done!</p>
@@ -219,10 +220,17 @@ export default function HintsView({
                 <div className="mt-2">
                   <HintSentence hint={h} />
                 </div>
-                {h.hint && (
-                  <div className="mt-2 rounded-md bg-gray-50 px-3 py-2 leading-relaxed text-gray-700">
+                {h.why && (
+                  <div className="mt-2 px-1 leading-relaxed text-gray-700">
                     <p className="font-medium text-gray-900">Hint</p>
-                    <HintText hint={h.hint} className="mt-0.5" />
+                    <HintText hint={h.why} className="mt-0.5" />
+                  </div>
+                )}
+                {h.hint && (
+                  <div className="mt-2 rounded-md bg-gray-50 px-3 py-2.5 leading-relaxed text-gray-700">
+                    {/* Older feedback has no explanation for the student: there the hint is the hint */}
+                    <p className="mb-1 font-medium text-gray-900">{h.why ? 'Usage & examples' : 'Hint'}</p>
+                    <HintText hint={h.hint} />
                   </div>
                 )}
                 {!preview && (

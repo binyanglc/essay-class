@@ -276,8 +276,10 @@ export interface SentenceRevision {
   source?: 'ai' | 'teacher';
   /** Comment section key for revisions created before ids existed (e.g. "sentence_2"). */
   commentKey?: string;
-  /** "Hints only": one sentence for the student that doesn't give the answer (AI-written, teacher can edit). */
+  /** "Hints only": words, collocations and examples for the student, one line per problem, without the corrected sentence (AI-written, teacher can edit). */
   hint?: string;
+  /** "Hints only": the student also sees `explanation` (checked for corrected sentences when the AI wrote it). Older feedback: only the teacher sees it. */
+  whyShared?: boolean;
   /** Where `original` changes, worked out on the server from original → revised (see lib/hints). */
   marks?: HintMark[];
 }

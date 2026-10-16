@@ -11,7 +11,7 @@ import type { DraftLabels } from '@/lib/draft-labels';
 import { DiffOps, NumberBadge } from './TrackChangesView';
 import { LABELS_TIP, LabelChip, LabelEditor, LabelsTip, RemoveReasonPrompt, changesFromOps } from './LabelControls';
 import { useTipDismissed } from '@/lib/tips';
-import { MAX_HINT, hintPoints } from '@/lib/hints';
+import { MAX_HINT } from '@/lib/hints';
 import HintText from './HintText';
 import type { LabelSuggestion, TagChip } from './LabelControls';
 
@@ -85,6 +85,8 @@ export default function RevisionInspector(props: Props) {
   const removing = tags.find((t) => t.id === removeChoice) ?? null;
   const canLabel = canEdit && !!props.onAddTag;
   const label = 'text-[11px] font-semibold uppercase tracking-wide text-gray-400';
+  // "Hints only": students also see the explanation (AI corrections from v19 on, and the teacher's own)
+  const whyShared = !!item.whyShared || !!editing?.isNew;
   const changes = changesFromOps(ops);
   const sameLabel = (a: LabelFields, b: TagChip) =>
     a.code === b.code &&
@@ -235,7 +237,14 @@ export default function RevisionInspector(props: Props) {
 
         {(editing || item.explanation) && (
         <div>
-          <p className={label}>Why</p>
+          <p className={label}>
+            {props.hintMode && whyShared ? 'Hint' : 'Why'}
+            {props.hintMode && (
+              <span className="ml-1 font-normal normal-case tracking-normal text-gray-400">
+                {whyShared ? '· students see this' : '· only you see this'}
+              </span>
+            )}
+          </p>
           {editing ? (
             <>
             <textarea
@@ -245,7 +254,9 @@ export default function RevisionInspector(props: Props) {
               rows={4}
               placeholder={
                 props.hintMode
-                  ? 'Optional — for you; in this assignment students see only the hint'
+                  ? whyShared
+                    ? 'Optional — what is wrong and why; students see this, so don’t write the corrected sentence'
+                    : 'Optional — for you; students don’t see the explanation of this older correction'
                   : 'Optional — explain the correction for the student'
               }
               className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
@@ -267,16 +278,23 @@ export default function RevisionInspector(props: Props) {
 
         {props.hintMode && (
           <div>
-            <p className={label}>Hint for the student</p>
+            <p className={label}>
+              {whyShared ? 'Usage & examples' : 'Hint for the student'}
+              <span className="ml-1 font-normal normal-case tracking-normal text-gray-400">· students see this</span>
+            </p>
             {editing ? (
               <>
               <textarea
                 id={`${slot}-hint-${item.id}`}
                 value={editing.hint ?? ''}
                 onChange={(e) => props.onDraft({ ...editing, hint: e.target.value })}
-                rows={Math.min(6, Math.max(2, hintPoints(editing.hint).length + 1))}
+                rows={Math.min(12, Math.max(3, (editing.hint ?? '').split('\n').length + 1))}
                 maxLength={MAX_HINT}
-                placeholder="Optional — one line per problem: the word, character or pattern to use (not the corrected sentence)"
+                placeholder={
+                  whyShared
+                    ? 'Optional — for each problem (an empty line between problems):\n表示的看法:\n→ 同意 (tóngyì) — to agree\nvs 表示 (biǎoshì) — to express\n• 同意……的看法 (tóngyì … de kànfǎ) — agree with …’s view\nExample: 我同意你的看法。(Wǒ tóngyì nǐ de kànfǎ.) — I agree with you.'
+                    : 'Optional — one line per problem: the right word or pattern (not the corrected sentence)'
+                }
                 className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
               />
               {!editing.isNew &&

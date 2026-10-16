@@ -142,6 +142,7 @@ export default function CompositionReview({
           revised: draft.revised,
           explanation: draft.explanation,
           hint: draft.hint,
+          ...(hintMode ? { whyShared: true } : {}),
           start: draft.start,
           end: draft.end,
           source: 'teacher',
@@ -159,7 +160,7 @@ export default function CompositionReview({
           }
         : r
     );
-  }, [revs, draft]);
+  }, [revs, draft, hintMode]);
 
   const placement = useMemo(() => placeRevisions(text, effective), [text, effective]);
   const ordered = useMemo(
@@ -204,6 +205,8 @@ export default function CompositionReview({
           revised: d.revised,
           explanation: d.explanation,
           ...((d.hint ?? '').trim() ? { hint: d.hint!.trim() } : {}),
+          // "Hints only": students see the teacher's own explanation too
+          ...(hintMode ? { whyShared: true } : {}),
           start: d.start,
           end: d.end,
           source: 'teacher',

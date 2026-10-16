@@ -34,7 +34,18 @@ function FeedbackNotes({ text, fb }: { text: string; fb: StudentFeedback }) {
             <div className="mt-1">
               <HintSentence hint={h} />
             </div>
-            {h.hint && <HintText hint={h.hint} className="mt-1 text-gray-700" />}
+            {h.why && (
+              <div className="mt-1 text-gray-700">
+                <p className="text-xs font-medium text-gray-500">Hint</p>
+                <HintText hint={h.why} />
+              </div>
+            )}
+            {h.hint && (
+              <div className="mt-1.5 rounded-md bg-gray-50 px-2.5 py-2 text-gray-700">
+                <p className="mb-1 text-xs font-medium text-gray-500">{h.why ? 'Usage & examples' : 'Hint'}</p>
+                <HintText hint={h.hint} />
+              </div>
+            )}
           </li>
         ))}
       </ol>

@@ -198,19 +198,15 @@ export async function POST(request: NextRequest) {
       content_feedback: feedbackData.content_feedback || '',
       structure_feedback: feedbackData.structure_feedback || '',
     };
-    // "Hints only": hints and comments that don't give the answer away; marks show where the problems are
-    const prepared =
-      feedbackStyle === 'hints'
-        ? prepareHintFeedback(finalText, comments, anchored)
-        : { comments, revisions: withMarks(anchored) };
-    const revisions = prepared.revisions;
+    // Marks show where the problems are; "hints only": the explanation is shared with the student as the hint
+    const revisions = feedbackStyle === 'hints' ? prepareHintFeedback(anchored) : withMarks(anchored);
 
     // The feedback as it is first shown to the student and the teacher
     const aiFeedback = {
-      ...prepared.comments,
+      ...comments,
       sentence_revisions: revisions,
     };
-    // Exactly what the AI wrote (before "hints only" checks), for the research copy below
+    // What the AI wrote, for the research copy below
     const aiRaw = { ...comments, sentence_revisions: withMarks(anchored) };
 
     // Feedback held for review can't be read back by the student (RLS), so it is

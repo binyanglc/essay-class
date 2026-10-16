@@ -1,6 +1,6 @@
 import type { SentenceRevision } from '@/types';
 import { placeRevisions } from './track-changes';
-import { MAX_HINT } from './hints';
+import { MAX_HINT, formatUsage } from './hints';
 
 /** A sentence revision that is guaranteed to have an id. */
 export type Revision = SentenceRevision & { id: string };
@@ -49,11 +49,15 @@ export function sanitizeRevisions(input: unknown, hintLimit: number = MAX_HINT):
     if (o.source === 'ai' || o.source === 'teacher') rev.source = o.source;
     if (typeof o.commentKey === 'string' && o.commentKey) rev.commentKey = o.commentKey.slice(0, 60);
     // "Hints only" assignments (marks are always worked out again on the server, see lib/hints)
-    // A hint is a string, one point per line; the AI writes a list of points
+    // A hint is saved as text. The AI writes a list: usage & examples (one object per problem),
+    // or, before v19, one string per problem
     const hint = Array.isArray(o.hint)
-      ? o.hint.filter((h): h is string => typeof h === 'string' && !!h.trim()).map((h) => h.trim()).join('\n')
+      ? o.hint.some((h) => h && typeof h === 'object')
+        ? formatUsage(o.hint)
+        : o.hint.filter((h): h is string => typeof h === 'string' && !!h.trim()).map((h) => h.trim()).join('\n')
       : o.hint;
     if (typeof hint === 'string' && hint.trim()) rev.hint = hint.trim().slice(0, hintLimit);
+    if (o.whyShared === true) rev.whyShared = true;
     out.push(rev);
   }
   return out;

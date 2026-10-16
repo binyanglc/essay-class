@@ -175,10 +175,11 @@ IMPORTANT:
 /**
  * "Hints only" assignments: the student sees where each problem is, but never
  * the revised sentence or the explanation (those are for the teacher). The AI
- * adds a hint per correction that teaches the fix — the right word or pattern,
- * how two similar words differ — without writing the corrected sentence, and
- * keeps corrected sentences out of the comments. lib/hints double-checks both
- * before anything is saved.
+ * explanation is written as always (the student sees it too, as the "hint");
+ * the AI adds "usage & examples" per problem — the right word or pattern,
+ * phrases and an example, with pinyin and English, never the corrected
+ * sentence — and keeps corrected sentences out of the comments. lib/hints
+ * double-checks all of them before anything is saved.
  */
 export function withHintRules(prompt: string): string {
   const schemaLine = `      "explanation": "Detailed English explanation — see EXPLANATION RULES below"\n    }`;
@@ -192,36 +193,29 @@ export function withHintRules(prompt: string): string {
     .replace(scriptExample, `Example: "完 doesn't fit here", not "wan doesn't fit here".`)
     .replace(
       schemaLine,
-      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": ["For the student: one item per problem — see HINT RULES below"]\n    }`
+      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": ["Usage & examples for the student: one object per problem — see HINT RULES below"]\n    }`
     )
     .replace(
       important,
-      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" or "explanation" — only the marked places, their type and your hint. The student must rewrite the sentence on their own, so the hint has to TEACH exactly what they need to fix it. A vague hint like "check the word choice" does not help):
-1. "hint" is a JSON array with ONE item per problem, in the order the problems come in the sentence (one item if there is one problem). Never put two problems in one item. No numbers or bullets.
-2. Start each item with the student's own words that it is about, in Chinese (for something missing, say where: "Before 在: …"). Then be specific:
-   - Wrong word (two similar words): name the student's word AND the right word, and contrast them — what each one means or goes with — with a short phrase for each that is NOT from this sentence.
-   - Wrong character: name the right character and contrast it with the one written: what each character means, with a common word for each.
-   - Grammar: name the exact pattern to use, written as a structure with placeholders, e.g. "不但 A，而且 B", "无论 A 还是 B，都……", "难道……吗", "正在 + verb", "verb + 得 + description", and say in a few words what it does.
-   - Missing or extra word: say which word is missing or not needed, and the rule.
-   - Word order: give the right order as a structure with placeholders, e.g. "subject + time word + verb" — never filled in with words from this sentence.
-   - You may add a short example, but it must be a NEW phrase or sentence, not from this composition.
-   - If the right word or pattern is probably new to the student, give its pinyin and meaning (the student won't see the explanation).
-   - Never just say "X is wrong, use Y instead": always say HOW the two differ, so the student learns when to use each. Not helpful: "改善 is wrong; use 提高 instead." Helpful: the first example below.
-3. NEVER write the corrected sentence or any corrected part of it: do not put the right word or pattern together with the student's other words from this sentence. Putting them together is the student's job.
-4. Each item is 1–2 short sentences in plain English at the student's level. Write all Chinese in characters (pinyin may follow in parentheses).
+      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" and must rewrite the sentence on their own). Your explanation says what is wrong and why. The "hint" is "usage & examples": it gives the student the words, phrases and an example they need to fix each problem — don't repeat the explanation.
+1. "hint" is a JSON array with ONE object per problem, in the same order as the explanation:
+   {"student_words": "…", "right": {"zh": "…", "pinyin": "…", "en": "…"}, "compare": {"zh": "…", "pinyin": "…", "en": "…"} or null, "phrases": [{"zh": "…", "pinyin": "…", "en": "…"}, …], "example": {"zh": "…", "pinyin": "…", "en": "…"}}
+2. "student_words": the student's own words the problem is about, copied from the sentence (for something missing, say where: "Before 跑步").
+3. "right": the right word, character or pattern. A pattern is written with placeholders: "不但 A，而且 B", "verb + 得 + description", "subject + time word + verb".
+4. "compare": when the student used a real word or character that means something else, that word, so the two can be told apart; otherwise null.
+5. "phrases": two or three common collocations or short phrases with the right word or pattern. A fixed frame with the student's own words is fine when the other words are left out with ……: "同意……的看法". [] if nothing fits (e.g. punctuation).
+6. "example": one short, NEW example sentence using it.
+7. Every "zh" gets "pinyin" (with tone marks; leave out placeholders like A, B, verb) and a short, plain "en".
+8. Phrases and the example must be NEW — not copied from this composition — and use words at the student's level. NEVER write the corrected sentence.
 Examples (original → revised: hint):
 - 他的汉语水平改善了很多 → 他的汉语水平提高了很多:
-  ["改善 vs 提高: 改善 means to make a bad situation better (改善环境、改善关系); 提高 means to raise a level or an ability (提高成绩、提高能力)."]
-- 我很喜换中文 → 我很喜欢中文:
-  ["喜换: 'to like' is written with 欢 (happy, as in 欢迎), not 换 (to exchange, as in 换钱)."]
-- 我们玩了很快乐 → 我们玩得很快乐:
-  ["了: to describe how an action went, use verb + 得 + description (他跑得很快). 了 only says the action is finished."]
+  [{"student_words": "改善", "right": {"zh": "提高", "pinyin": "tígāo", "en": "to raise, improve (a level or ability)"}, "compare": {"zh": "改善", "pinyin": "gǎishàn", "en": "to make a bad situation better"}, "phrases": [{"zh": "提高成绩", "pinyin": "tígāo chéngjì", "en": "improve one's grades"}, {"zh": "提高能力", "pinyin": "tígāo nénglì", "en": "improve one's ability"}, {"zh": "改善环境", "pinyin": "gǎishàn huánjìng", "en": "improve the environment"}], "example": {"zh": "我想提高我的口语。", "pinyin": "Wǒ xiǎng tígāo wǒ de kǒuyǔ.", "en": "I want to improve my speaking."}}]
 - 我去了学校昨天 → 我昨天去了学校:
-  ["昨天: time words go before the verb in Chinese: subject + time word + verb (他明天来)."]
+  [{"student_words": "昨天", "right": {"zh": "subject + time word + verb", "pinyin": "", "en": "time words go before the verb"}, "compare": null, "phrases": [{"zh": "明天去", "pinyin": "míngtiān qù", "en": "go tomorrow"}, {"zh": "晚上见", "pinyin": "wǎnshang jiàn", "en": "see you this evening"}], "example": {"zh": "我明天去北京。", "pinyin": "Wǒ míngtiān qù Běijīng.", "en": "I'm going to Beijing tomorrow."}}]
 - 无论天气好或不好，他每天跑步 → 无论天气好不好，他每天都跑步:
-  ["好或不好: after 无论, give the choices as a question — A 还是 B, or the positive and negative together (忙不忙、远不远) — not with 或.", "Before 跑步: 无论 needs 都 in the second part: 无论……，subject + 都 + verb."]
+  [{"student_words": "好或不好", "right": {"zh": "无论 A 还是 B", "pinyin": "wúlùn … háishi …", "en": "no matter whether A or B"}, "compare": {"zh": "或", "pinyin": "huò", "en": "or (in statements, not after 无论)"}, "phrases": [{"zh": "无论忙不忙", "pinyin": "wúlùn máng bu máng", "en": "whether busy or not"}, {"zh": "无论你还是我", "pinyin": "wúlùn nǐ háishi wǒ", "en": "whether you or me"}], "example": {"zh": "无论你去还是不去，我都去。", "pinyin": "Wúlùn nǐ qù háishi bú qù, wǒ dōu qù.", "en": "Whether you go or not, I'm going."}}, {"student_words": "Before 跑步", "right": {"zh": "无论……，subject + 都 + verb", "pinyin": "wúlùn …, … dōu …", "en": "no matter …, still …"}, "compare": null, "phrases": [{"zh": "都要去", "pinyin": "dōu yào qù", "en": "will go anyway"}], "example": {"zh": "无论多忙，他都学习。", "pinyin": "Wúlùn duō máng, tā dōu xuéxí.", "en": "However busy he is, he studies."}}]
 
-COMMENTS for this student: sum up the kinds of problems and the rules (the hints already give the details). Never write a corrected sentence or a corrected part of the composition, and don't word corrections as instructions like "change X to Y".
+COMMENTS for this student: sum up the kinds of problems and the rules (the explanations and hints already give the details). Never write a corrected sentence or a corrected part of the composition, and don't word corrections as instructions like "change X to Y".
 
 ${important}`
     );
