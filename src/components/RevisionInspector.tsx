@@ -276,11 +276,13 @@ export default function RevisionInspector(props: Props) {
         </div>
         )}
 
-        {props.hintMode && (
+        {(props.hintMode || editing || item.hint) && (
           <div>
             <p className={label}>
-              {whyShared ? 'Usage & examples' : 'Hint for the student'}
-              <span className="ml-1 font-normal normal-case tracking-normal text-gray-400">· students see this</span>
+              {props.hintMode && !whyShared ? 'Hint for the student' : 'Usage & examples'}
+              {canEdit && (
+                <span className="ml-1 font-normal normal-case tracking-normal text-gray-400">· students see this</span>
+              )}
             </p>
             {editing ? (
               <>
@@ -291,7 +293,7 @@ export default function RevisionInspector(props: Props) {
                 rows={Math.min(12, Math.max(3, (editing.hint ?? '').split('\n').length + 1))}
                 maxLength={MAX_HINT}
                 placeholder={
-                  whyShared
+                  whyShared || !props.hintMode
                     ? 'Optional — for each problem (an empty line between problems):\n表示的看法:\n→ 同意 (tóngyì) — to agree\nvs 表示 (biǎoshì) — to express\n• 同意……的看法 (tóngyì … de kànfǎ) — agree with …’s view\nExample: 我同意你的看法。(Wǒ tóngyì nǐ de kànfǎ.) — I agree with you.'
                     : 'Optional — one line per problem: the right word or pattern (not the corrected sentence)'
                 }
@@ -302,7 +304,9 @@ export default function RevisionInspector(props: Props) {
                 (editing.hint ?? '') === (editing.baseHint ?? '') &&
                 !!(editing.hint ?? '').trim() && (
                   <p className="mt-1 text-[11px] leading-snug text-amber-700">
-                    You changed the suggestion — check that the hint still fits and doesn&apos;t show the corrected sentence.
+                    {props.hintMode
+                      ? 'You changed the suggestion — check that the hint still fits and doesn’t show the corrected sentence.'
+                      : 'You changed the suggestion — check that the usage & examples still fit.'}
                   </p>
                 )}
               </>

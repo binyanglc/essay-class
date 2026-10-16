@@ -135,12 +135,12 @@ export const FEEDBACK_STYLES: { value: FeedbackStyle; label: string; hint: strin
   {
     value: 'corrections',
     label: 'Corrections',
-    hint: 'Students see each corrected sentence and why it was changed.',
+    hint: 'Students see each corrected sentence, why it was changed, and usage & examples (phrases and example sentences with pinyin and English).',
   },
   {
     value: 'hints',
     label: 'Hints only',
-    hint: 'Students see where each problem is and a hint that teaches the fix (the right pattern, or how two similar words differ) — never the corrected sentence. They rewrite it themselves. You still see the full corrections.',
+    hint: 'Students see where each problem is, a hint (what is wrong and why) and usage & examples — never the corrected sentence. They rewrite it themselves. You still see the full corrections.',
   },
 ];
 

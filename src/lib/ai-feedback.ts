@@ -15,7 +15,7 @@ export interface FeedbackOptions {
   fetchImpl?: typeof fetch;
   /** Told the tokens and time the call used. */
   onUsage?: (usage: AiUsage) => void;
-  /** "hints": the student won't see the corrections — also write a hint per correction, and no corrected sentences in comments. */
+  /** "hints": the student won't see the corrections, only the explanation and usage & examples (see withUsageRules). */
   style?: FeedbackStyle;
   /** The students' HSK level (migration v18): correct with words and grammar at this level or below. */
   studentLevel?: StudentLevel | null;
@@ -137,7 +137,7 @@ IMPORTANT:
 - Write explanations and comments in English, but write every Chinese character, word or sentence you mention in Chinese characters (in the student's script), as in the examples above. Never use pinyin alone; pinyin may follow in parentheses. Example: "Replace 要 with 希望", not "Replace yao with xiwang".
 - Return valid JSON only`;
 
-  if (opts.style === 'hints') prompt = withHintRules(prompt);
+  prompt = withUsageRules(prompt, opts.style ?? 'corrections');
 
   const started = Date.now();
   const response = await (opts.fetchImpl ?? fetch)('https://api.openai.com/v1/chat/completions', {
@@ -174,31 +174,28 @@ IMPORTANT:
 }
 
 /**
- * "Hints only" assignments: the student sees where each problem is, but never
- * the revised sentence or the explanation (those are for the teacher). The AI
- * explanation is written as always (the student sees it too, as the "hint");
- * the AI adds "usage & examples" per problem — the right word or pattern,
- * phrases and an example, with pinyin and English, never the corrected
- * sentence — and keeps corrected sentences out of the comments. lib/hints
- * double-checks all of them before anything is saved.
+ * Usage & examples, for both feedback styles: besides the corrected sentence
+ * and the explanation, the AI writes for each problem the right word or
+ * pattern, a word to compare it with, phrases and an example sentence — each
+ * with pinyin and English — so the student has something to learn from
+ * (saved as text, see lib/hints formatUsage). "Hints only": the student sees
+ * where each problem is, the explanation (as "Hint") and the usage &
+ * examples, never the corrected sentence, and rewrites it themselves.
  */
-export function withHintRules(prompt: string): string {
+export function withUsageRules(prompt: string, style: FeedbackStyle = 'corrections'): string {
+  const hints = style === 'hints';
   const schemaLine = `      "explanation": "Detailed English explanation — see EXPLANATION RULES below"\n    }`;
   const important = `IMPORTANT:\n- sentence_revisions may be an empty array`;
   // The general rule's example is itself a correction; give one that isn't
   const scriptExample = `Example: "Replace 要 with 希望", not "Replace yao with xiwang".`;
   if (!prompt.includes(schemaLine) || !prompt.includes(important) || !prompt.includes(scriptExample)) {
-    throw new Error('Feedback prompt changed: update withHintRules');
+    throw new Error('Feedback prompt changed: update withUsageRules');
   }
-  return prompt
-    .replace(scriptExample, `Example: "完 doesn't fit here", not "wan doesn't fit here".`)
-    .replace(
-      schemaLine,
-      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": ["Usage & examples for the student: one object per problem — see HINT RULES below"]\n    }`
-    )
-    .replace(
-      important,
-      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" and must rewrite the sentence on their own). Your explanation says what is wrong and why. The "hint" is "usage & examples": it gives the student the words, phrases and an example they need to fix each problem — don't repeat the explanation.
+  const rules = `${
+    hints
+      ? 'HINTS ONLY: this teacher chose "hints only": the student will NOT see "revised" and must rewrite the sentence on their own.\n\n'
+      : ''
+  }USAGE & EXAMPLES RULES (the "hint" field): your explanation says what is wrong and why. The "hint" gives the student the words, phrases and an example they need to learn from for each problem — don't repeat the explanation.
 1. "hint" is a JSON array with ONE object per problem, in the same order as the explanation:
    {"student_words": "…", "right": {"zh": "…", "pinyin": "…", "en": "…"}, "compare": {"zh": "…", "pinyin": "…", "en": "…"} or null, "phrases": [{"zh": "…", "pinyin": "…", "en": "…"}, …], "example": {"zh": "…", "pinyin": "…", "en": "…"}}
 2. "student_words": the student's own words the problem is about, copied from the sentence (for something missing, say where: "Before 跑步").
@@ -207,7 +204,7 @@ export function withHintRules(prompt: string): string {
 5. "phrases": two or three common collocations or short phrases with the right word or pattern. A fixed frame with the student's own words is fine when the other words are left out with ……: "同意……的看法". [] if nothing fits (e.g. punctuation).
 6. "example": one short, NEW example sentence using it.
 7. Every "zh" gets "pinyin" (with tone marks; leave out placeholders like A, B, verb) and a short, plain "en".
-8. Phrases and the example must be NEW — not copied from this composition — and use words at the student's level. NEVER write the corrected sentence.
+8. Phrases and the example must be NEW — not copied from this composition — and use words at the student's level.${hints ? ' NEVER write the corrected sentence.' : ''}
 Examples (original → revised: hint):
 - 他的汉语水平改善了很多 → 他的汉语水平提高了很多:
   [{"student_words": "改善", "right": {"zh": "提高", "pinyin": "tígāo", "en": "to raise, improve (a level or ability)"}, "compare": {"zh": "改善", "pinyin": "gǎishàn", "en": "to make a bad situation better"}, "phrases": [{"zh": "提高成绩", "pinyin": "tígāo chéngjì", "en": "improve one's grades"}, {"zh": "提高能力", "pinyin": "tígāo nénglì", "en": "improve one's ability"}, {"zh": "改善环境", "pinyin": "gǎishàn huánjìng", "en": "improve the environment"}], "example": {"zh": "我想提高我的口语。", "pinyin": "Wǒ xiǎng tígāo wǒ de kǒuyǔ.", "en": "I want to improve my speaking."}}]
@@ -216,8 +213,19 @@ Examples (original → revised: hint):
 - 无论天气好或不好，他每天跑步 → 无论天气好不好，他每天都跑步:
   [{"student_words": "好或不好", "right": {"zh": "无论 A 还是 B", "pinyin": "wúlùn … háishi …", "en": "no matter whether A or B"}, "compare": {"zh": "或", "pinyin": "huò", "en": "or (in statements, not after 无论)"}, "phrases": [{"zh": "无论忙不忙", "pinyin": "wúlùn máng bu máng", "en": "whether busy or not"}, {"zh": "无论你还是我", "pinyin": "wúlùn nǐ háishi wǒ", "en": "whether you or me"}], "example": {"zh": "无论你去还是不去，我都去。", "pinyin": "Wúlùn nǐ qù háishi bú qù, wǒ dōu qù.", "en": "Whether you go or not, I'm going."}}, {"student_words": "Before 跑步", "right": {"zh": "无论……，subject + 都 + verb", "pinyin": "wúlùn …, … dōu …", "en": "no matter …, still …"}, "compare": null, "phrases": [{"zh": "都要去", "pinyin": "dōu yào qù", "en": "will go anyway"}], "example": {"zh": "无论多忙，他都学习。", "pinyin": "Wúlùn duō máng, tā dōu xuéxí.", "en": "However busy he is, he studies."}}]
 
-COMMENTS for this student: sum up the kinds of problems and the rules (the explanations and hints already give the details). Never write a corrected sentence or a corrected part of the composition, and don't word corrections as instructions like "change X to Y".
-
-${important}`
-    );
+${
+    hints
+      ? 'COMMENTS for this student: sum up the kinds of problems and the rules (the explanations and hints already give the details). Never write a corrected sentence or a corrected part of the composition, and don\'t word corrections as instructions like "change X to Y".\n\n'
+      : ''
+  }`;
+  const out = prompt
+    .replace(
+      schemaLine,
+      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": ["Usage & examples for the student: one object per problem — see USAGE & EXAMPLES RULES below"]\n    }`
+    )
+    .replace(important, () => `${rules}${important}`);
+  return hints ? out.replace(scriptExample, () => `Example: "完 doesn't fit here", not "wan doesn't fit here".`) : out;
 }
+
+/** The prompt for a "hints only" assignment (see withUsageRules). */
+export const withHintRules = (prompt: string) => withUsageRules(prompt, 'hints');

@@ -62,6 +62,12 @@ function FeedbackNotes({ text, fb }: { text: string; fb: StudentFeedback }) {
               <DiffOps ops={p.ops} show="after" />
             </p>
             {p.rev.explanation && <p className="mt-1 text-xs leading-relaxed text-gray-500">{p.rev.explanation}</p>}
+            {p.rev.hint && (
+              <div className="mt-1.5 rounded-md bg-gray-50 px-2.5 py-2 text-gray-700">
+                <p className="mb-1 text-xs font-medium text-gray-500">Usage &amp; examples</p>
+                <HintText hint={p.rev.hint} />
+              </div>
+            )}
           </li>
         ))}
       </ol>

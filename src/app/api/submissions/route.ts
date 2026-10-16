@@ -5,7 +5,7 @@ import { tagRevisions } from '@/lib/ai-tagging';
 import type { AiTagRow } from '@/lib/ai-tagging';
 import { getStudentErrorPatterns } from '@/lib/error-tracking';
 import { anchorRevisions } from '@/lib/revisions';
-import { prepareHintFeedback, withMarks } from '@/lib/hints';
+import { prepareCorrections, prepareHintFeedback, withMarks } from '@/lib/hints';
 import { joinWrappedLines } from '@/lib/text-layout';
 import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isMaxDrafts, isStudentLevel } from '@/types';
 import type { CorrectionLevel, FeedbackStyle, StudentLevel } from '@/types';
@@ -198,8 +198,8 @@ export async function POST(request: NextRequest) {
       content_feedback: feedbackData.content_feedback || '',
       structure_feedback: feedbackData.structure_feedback || '',
     };
-    // Marks show where the problems are; "hints only": the explanation is shared with the student as the hint
-    const revisions = feedbackStyle === 'hints' ? prepareHintFeedback(anchored) : withMarks(anchored);
+    // Marks show where the problems are; usage & examples for both; "hints only": the explanation is shared with the student as the hint
+    const revisions = feedbackStyle === 'hints' ? prepareHintFeedback(anchored) : prepareCorrections(anchored);
 
     // The feedback as it is first shown to the student and the teacher
     const aiFeedback = {

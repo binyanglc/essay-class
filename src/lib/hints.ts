@@ -286,6 +286,11 @@ export function tidyHint(hint: string | null | undefined): string {
   return out.join(isUsage(text) ? '\n\n' : '\n');
 }
 
+/** Prepares the AI's corrections for a "corrections" assignment: marks, and usage & examples tidied. */
+export function prepareCorrections<R extends SentenceRevision>(revisions: R[]): R[] {
+  return withMarks(revisions).map((r) => ({ ...r, hint: tidyHint(r.hint) || undefined }));
+}
+
 /**
  * Prepares the AI's corrections for a "hints only" assignment: where each
  * problem is (marks), the explanation shared with the student, and the usage
