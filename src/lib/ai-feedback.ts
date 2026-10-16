@@ -129,6 +129,7 @@ EXPLANATION RULES for sentence_revisions:
 2. When the revised sentence uses vocabulary or grammar the student may not know, TEACH it:
    "The revised sentence uses '不仅...而且...' (not only...but also...) — this is a common pattern to connect two related advantages. 不仅 introduces the first point, 而且 introduces the second."
 3. Every change between the original and revised sentence must be explained. Do not leave any correction unexplained.
+4. Write every explanation in English, even when the composition is advanced: the student reads English much better than Chinese. Quote the Chinese words you discuss in characters, but never write the explanation itself in Chinese.
 
 IMPORTANT:
 - sentence_revisions may be an empty array if nothing needs correcting at this level
@@ -151,7 +152,7 @@ IMPORTANT:
         {
           role: 'system',
           content:
-            'You are a Chinese writing teacher for American students. Return JSON only. Be accurate and pedagogically useful: correct what needs correcting at the requested level, leave acceptable sentences alone, and explain every change you make.',
+            'You are a Chinese writing teacher for American students. Return JSON only. Be accurate and pedagogically useful: correct what needs correcting at the requested level, leave acceptable sentences alone, and explain every change you make. Write all explanations and comments in English, quoting Chinese only for the words you discuss.',
         },
         { role: 'user', content: prompt },
       ],
