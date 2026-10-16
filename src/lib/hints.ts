@@ -197,8 +197,16 @@ const MAX_POINT = 300;
 const POINT_NUMBER = /^\s*(?:[(（]\d{1,2}[)）]|\d{1,2}[.)、．]|[①-⑳]|[•·*\-–—])\s*/;
 
 /**
+ * Where a new point starts after a semicolon: "…; 怀处 vs 坏处: …", "…; Before 之前: …"
+ * (but not "…; 严格 means strict", the second half of a contrast).
+ */
+const NEXT_POINT =
+  /\s*[;；]\s*(?=(?:(?:Before|After|Between)\s+)?[^\s;；:：]{1,12}(?:\s*(?:vs\.?|\/|or)\s*[^\s;；:：]{1,12})?\s*[:：])/i;
+
+/**
  * A hint's points — one per problem, one per line — without numbers, bullets
- * or markdown bold. A numbered "(1) … (2) …" written on one line is split too.
+ * or markdown bold. Points written on one line are split too: numbered
+ * "(1) … (2) …", or "X: …; Y: …".
  */
 export function hintPoints(hint: string | null | undefined): string[] {
   return (hint ?? '')
@@ -208,6 +216,7 @@ export function hintPoints(hint: string | null | undefined): string[] {
     .flatMap((line) =>
       /^\s*(?:[(（]1[)）]|①)/.test(line) ? line.split(/\s*(?=[(（](?:[2-9]|1\d)[)）]|[②-⑳])/) : [line]
     )
+    .flatMap((line) => line.split(NEXT_POINT))
     .map((p) => p.replace(POINT_NUMBER, '').trim())
     .filter(Boolean);
 }
