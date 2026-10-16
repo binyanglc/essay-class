@@ -11,8 +11,8 @@
  * The result is checked here:
  *   - rules must belong to their code; quoted words must be in the sentence;
  *   - changes that can only mean one thing are labelled by rule, overriding
- *     the AI (lib/label-rules: ±了, 的/地/得, same-sounding characters,
- *     English punctuation) — the AI's own answer stays in ai_original;
+ *     the AI (lib/label-rules: ±了, 的/地/得, English punctuation) — the
+ *     AI's own answer stays in ai_original;
  *   - every correction gets a label: skipped ones are asked about again, and
  *     still-unlabelled ones get a rule-based label when their changes allow;
  *   - English punctuation counts once per essay;
@@ -40,8 +40,7 @@ import {
   ruleForCode,
 } from './error-taxonomy';
 import type { Nature, Operation, Severity } from './error-taxonomy';
-import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind, wholeWords } from './label-rules';
-import { isHskWord } from './hsk-words-2025';
+import { RULE_KIND_CODE, changesAt, coreOf, isLeAfterMei, ruleKind } from './label-rules';
 import type { PositionedChange, RuleKind } from './label-rules';
 import { samplingParams, usageFrom } from './ai-models';
 import {
@@ -57,12 +56,16 @@ import type { AiUsage, ReasoningEffort } from './ai-models';
 
 /**
  * Default model for labelling (override with OPENAI_TAGGING_MODEL).
- * With the rules and worked examples, gpt-4o-mini labelled all 12 test
- * sentences right (as gpt-4.1-mini did) at about a third of the price.
+ * Once wrong characters were left to the AI (2026-10-16), gpt-6-luna got 12 of
+ * 14 test corrections right and gpt-4o-mini 8 (it called 了结 → 了解, 怀处 and
+ * 体息 word choices), at about the same price.
  */
-export const TAGGING_MODEL = 'gpt-4o-mini';
+export const TAGGING_MODEL = 'gpt-6-luna';
 /** Used when the model set in OPENAI_TAGGING_MODEL isn't available to this API key. */
 export const FALLBACK_TAGGING_MODEL = 'gpt-4o-mini';
+
+/** Labels for one wrong character. */
+const CHARACTER_CODES = new Set(['CHAR.SOUND', 'CHAR.SHAPE']);
 
 export interface RevisionForTagging {
   id: string;
@@ -199,7 +202,15 @@ const EXAMPLES = `
 15. 每个人都有他们的爱好。 → 每个人都有自己的爱好。
    ⇒ "他们" / "自己" — 自己 refers back to the subject ⇒ GRAM.PRON, grammar point H25-2-007
 16. 我有二个哥哥。 → 我有两个哥哥。
-   ⇒ "二" / "两" — 两 before a measure word ⇒ GRAM.NUM, grammar point H25-1-011`;
+   ⇒ "二" / "两" — 两 before a measure word ⇒ GRAM.NUM, grammar point H25-1-011
+17. 因些我不同意。 → 因此我不同意。
+   ⇒ "些" / "此" — 些 (xiē) looks like 此 (cǐ) but sounds different ⇒ CHAR.SHAPE   (quote the characters, not 因些 / 因此)
+18. 我想了结中国文化。 → 我想了解中国文化。
+   ⇒ "结" / "解" — 结 (jié) and 解 (jiě) sound alike; 了结 ("to settle") is a rare word the student didn't mean ⇒ CHAR.SOUND
+19. 他已经段烟了。 → 他已经戒烟了。
+   ⇒ "段" / "断" — the student meant 断烟 and wrote 段, which sounds the same (duàn) ⇒ CHAR.SOUND   (target_text "断", the character they meant)
+20. 吸烟也是一种权力。 → 吸烟也是一种权利。
+   ⇒ "权力" / "权利" — two different words: 权力 power, 权利 a right ⇒ VOC.CHOICE   (not CHAR.SOUND)`;
 
 const LEVEL_NOTE: Record<CorrectionLevel, string> = {
   essential: 'The teacher asked for ESSENTIAL corrections only, so every correction fixes a real error: use nature "error".',
@@ -209,7 +220,7 @@ const LEVEL_NOTE: Record<CorrectionLevel, string> = {
     'DETAILED corrections: besides errors ("error"), many only make phrasing more natural — those are "infelicity" (use EXPR.NATURAL when no more specific code fits).',
 };
 
-function buildPrompt(revisions: RevisionForTagging[], level: CorrectionLevel, onlyMissing: boolean): string {
+export function buildPrompt(revisions: RevisionForTagging[], level: CorrectionLevel, onlyMissing: boolean): string {
   const list = revisions
     .map((r, i) => {
       const changes = changesIn(r.original, r.revised).map(describeChange).join('; ');
@@ -228,9 +239,9 @@ MISUSE RULES (optional detail for some grammar codes — use one only when it cl
 ${rulesText()}
 
 HOW TO DECIDE
-1. A wrong character with the same or similar sound → CHAR.SOUND; similar shape → CHAR.SHAPE (even if the wrong character on its own is also a word, e.g. 在/再, 做/作). Exception: 的/地/得 → GRAM.DE. But when what the student wrote is itself a real word of two or more characters with another meaning (权力 for 权利, 严厉 for 严格), it is a word problem → VOC.CHOICE: quote both whole words.
+1. A wrong character: quote only the wrong character and the right one ("些" / "此", not "因些" / "因此"). Check the pinyin: same or similar sound (在/再 zài, 做/作 zuò) → CHAR.SOUND; looks similar but sounds different (些 xiē / 此 cǐ, 己 jǐ / 已 yǐ) → CHAR.SHAPE. This holds even if the wrong character on its own is also a word (在/再, 做/作), or the student's two characters happen to make a rare word they can't have meant (了结 for 了解 → CHAR.SOUND). Exception: 的/地/得 → GRAM.DE. But when what the student wrote is a real word of two or more characters with another meaning, one a learner would use (权力 for 权利, 严厉 for 严格), it is a word problem → VOC.CHOICE: quote both whole words. When what the student wrote is no word at all and Corrected uses a different word, look for the character they meant: 段烟 → 戒烟 is 断烟 with 段 written for 断 (both duàn) → CHAR.SOUND, learner_text "段", target_text "断" (the character they meant, even though it is not in Corrected).
 2. Adding or removing 了 is ALWAYS GRAM.LE (never GRAM.NEG or GRAM.CONSTIT). With 没 in the clause, the rule is R.LE.NEG.
-3. Missing/extra/swapped characters: if what the student wrote is not a word (图馆) → CHAR.INWORD; if it is another real word (兴趣 → 感兴趣) → a vocabulary or grammar code.
+3. A character missing or extra in a word, or two characters in the wrong order (图馆 → 图书馆, 习学 → 学习): if what the student wrote is not a word → CHAR.INWORD; if it is another real word (兴趣 → 感兴趣) → a vocabulary or grammar code. A character written in place of another (段烟, 怀处) is rule 1, never CHAR.INWORD.
 4. If the fix introduces or removes a construction (把, 被, 是……的, 比), use that construction's code even if 了 etc. also changed.
 5. GRAM.ORDER only when words move to another place. Prefer a specific code over GRAM.ORDER, GRAM.CONSTIT or GRAM.OTHER.
 6. Connectives inside one sentence → GRAM.CONJ; between sentences (across 。！？) → DISC.CONNECT.
@@ -251,7 +262,7 @@ ${EXAMPLES}
 FOR EACH LABEL, in this order
 - revision: the correction's number in brackets.
 - learner_text: the shortest part of "Student wrote" that is wrong (a character, word or particle), copied exactly; "" if something was missing.
-- target_text: what replaces it in "Corrected", copied exactly; "" if it was simply removed.
+- target_text: what replaces it in "Corrected", copied exactly; "" if it was simply removed. (For a wrong character, the character the student meant when Corrected uses another word — rule 1.)
 - problem: a few words on what exactly is wrong (e.g. "在 and 再 sound the same", "extra 了 after 没").
 - code: the label that matches the problem.
 - rule: a misuse rule id from the list for this code, or null.
@@ -390,14 +401,6 @@ function matchChange(
   return sameKind[0];
 }
 
-/** The change a label's quoted words are about (the only change when there is just one). */
-function changeQuoted(rev: RevisionForTagging, changes: PositionedChange[], learner: string): PositionedChange | undefined {
-  if (changes.length === 1) return changes[0];
-  const p = learner ? rev.original.indexOf(learner) : -1;
-  if (p < 0) return undefined;
-  return changes.find((c) => c.at >= p && c.at < p + learner.length) ?? changes.find((c) => c.at + c.learner.length > p && c.at <= p + learner.length);
-}
-
 function row(
   rev: RevisionForTagging,
   code: string,
@@ -488,7 +491,11 @@ export function checkLabels(
     let learner = clean(l.learner_text);
     let target = clean(l.target_text);
     if (learner && !containsLoosely(rev.original, learner)) learner = '';
-    if (target && !containsLoosely(rev.revised, target)) target = '';
+    // A wrong character may be labelled with the one the student meant, when the correction
+    // uses another word (段烟 → 戒烟: 段 written for 断) — the AI's call, kept
+    const meant =
+      CHARACTER_CODES.has(code.code) && [...learner].length === 1 && [...target].length === 1 && rev.original.includes(learner);
+    if (target && !meant && !containsLoosely(rev.revised, target)) target = '';
     if (!learner && !target && changes.length === 1) {
       learner = changes[0].learner.trim().slice(0, 40);
       target = changes[0].target.trim().slice(0, 40);
@@ -510,14 +517,12 @@ export function checkLabels(
     // Changes that can only mean one thing get the rule's label
     const kind = ruleKind(learner, target);
     let at = -1;
-    let matched: PositionedChange | undefined;
     if (kind) {
       const change = matchChange(rev, changes, used.get(rev.id)!, learner, kind) ?? {
         learner,
         target,
         at: Math.max(0, rev.original.indexOf(learner)),
       };
-      matched = change;
       used.get(rev.id)!.add(change);
       at = change.at;
       const fixed = ruleBased(rev, change, kind, l.rule);
@@ -528,17 +533,14 @@ export function checkLabels(
       target = fixed.target;
     }
 
-    // A real word swapped for another (权力 → 权利, 严厉 → 严格) is a word choice, not a
-    // character error: label it with both whole words (agreed with the site owner 2026-10-16)
-    if (code.code === 'CHAR.SOUND' || code.code === 'CHAR.SHAPE') {
-      const change = matched ?? changeQuoted(rev, changes, learner);
-      const words = change && wholeWords(rev.original, change, isHskWord);
-      if (words) {
-        aiOriginal.overridden_by_rule = 'WORD';
-        code = getCode('VOC.CHOICE')!;
-        rule = null;
-        learner = words.learner;
-        target = words.target;
+    // Wrong character or wrong word, same-sounding or similar-looking: the AI decides (site owner,
+    // 2026-10-16: rules that second-guessed it made 了结 → 了解 a word choice). Only the quote is
+    // tidied: a wrong character is recorded as the two characters (此 ← 些, not 因此 ← 因些).
+    if (CHARACTER_CODES.has(code.code)) {
+      const core = coreOf(learner, target);
+      if (core.learner && core.target && core.learner.length === core.target.length) {
+        learner = core.learner;
+        target = core.target;
       }
     }
 
