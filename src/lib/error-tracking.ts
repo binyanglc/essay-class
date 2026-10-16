@@ -194,7 +194,8 @@ export function inDomainOrder(groups: IssueGroup[]): IssueGroup[] {
   return [...groups].sort((a, b) => rank(a.error_type) - rank(b.error_type));
 }
 
-async function studentTags(supabase: SupabaseClient, studentId: string): Promise<ErrorTag[]> {
+/** One student's active labels from first drafts, newest first (with their "hints only" labels, without answers). */
+export async function studentTags(supabase: SupabaseClient, studentId: string): Promise<ErrorTag[]> {
   const [{ data }, hintTags, laterDrafts] = await Promise.all([
     supabase
       .from('error_tags')
