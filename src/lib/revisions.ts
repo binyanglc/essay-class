@@ -1,5 +1,6 @@
 import type { SentenceRevision } from '@/types';
 import { placeRevisions } from './track-changes';
+import { MAX_HINT } from './hints';
 
 /** A sentence revision that is guaranteed to have an id. */
 export type Revision = SentenceRevision & { id: string };
@@ -25,8 +26,11 @@ export function commentKeyFor(rev: Revision): string {
   return rev.commentKey ?? `sentence_${rev.id}`;
 }
 
-/** Validates sentence revisions coming from a client before they are stored. */
-export function sanitizeRevisions(input: unknown): SentenceRevision[] | null {
+/**
+ * Validates sentence revisions before they are stored. `hintLimit`: longest
+ * hint kept (the AI's hints are cut to whole points later, in lib/hints).
+ */
+export function sanitizeRevisions(input: unknown, hintLimit: number = MAX_HINT): SentenceRevision[] | null {
   if (!Array.isArray(input)) return null;
   const out: SentenceRevision[] = [];
   for (const item of input) {
@@ -45,7 +49,7 @@ export function sanitizeRevisions(input: unknown): SentenceRevision[] | null {
     if (o.source === 'ai' || o.source === 'teacher') rev.source = o.source;
     if (typeof o.commentKey === 'string' && o.commentKey) rev.commentKey = o.commentKey.slice(0, 60);
     // "Hints only" assignments (marks are always worked out again on the server, see lib/hints)
-    if (typeof o.hint === 'string' && o.hint.trim()) rev.hint = o.hint.trim().slice(0, 300);
+    if (typeof o.hint === 'string' && o.hint.trim()) rev.hint = o.hint.trim().slice(0, hintLimit);
     out.push(rev);
   }
   return out;
@@ -57,7 +61,7 @@ export function sanitizeRevisions(input: unknown): SentenceRevision[] | null {
  * (exact text + offsets) so every view can place it without guessing.
  */
 export function anchorRevisions(text: string, input: unknown): SentenceRevision[] {
-  const items: Revision[] = (sanitizeRevisions(input) ?? [])
+  const items: Revision[] = (sanitizeRevisions(input, MAX_HINT * 5) ?? [])
     .filter((r) => r.original.trim() && r.original.trim() !== r.revised.trim())
     .map((r) => ({ ...r, id: newRevisionId(), source: 'ai' as const }));
   const { placed } = placeRevisions(text, items);

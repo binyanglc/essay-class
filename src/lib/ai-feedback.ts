@@ -15,7 +15,7 @@ export interface FeedbackOptions {
   fetchImpl?: typeof fetch;
   /** Told the tokens and time the call used. */
   onUsage?: (usage: AiUsage) => void;
-  /** "hints": the student won't see the corrections — also write a hint per correction, and no answers in comments. */
+  /** "hints": the student won't see the corrections — also write a hint per correction, and no corrected sentences in comments. */
   style?: FeedbackStyle;
   /** The students' HSK level (migration v18): correct with words and grammar at this level or below. */
   studentLevel?: StudentLevel | null;
@@ -175,8 +175,10 @@ IMPORTANT:
 /**
  * "Hints only" assignments: the student sees where each problem is, but never
  * the revised sentence or the explanation (those are for the teacher). The AI
- * adds one hint per correction, and keeps answers out of the comments.
- * lib/hints double-checks both before anything is saved.
+ * adds a hint per correction that teaches the fix — the right word or pattern,
+ * how two similar words differ — without writing the corrected sentence, and
+ * keeps corrected sentences out of the comments. lib/hints double-checks both
+ * before anything is saved.
  */
 export function withHintRules(prompt: string): string {
   const schemaLine = `      "explanation": "Detailed English explanation — see EXPLANATION RULES below"\n    }`;
@@ -190,21 +192,35 @@ export function withHintRules(prompt: string): string {
     .replace(scriptExample, `Example: "完 doesn't fit here", not "wan doesn't fit here".`)
     .replace(
       schemaLine,
-      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": "ONE short sentence for the student — see HINT RULES below"\n    }`
+      `      "explanation": "Detailed English explanation — see EXPLANATION RULES below",\n      "hint": "For the student: one point per problem, each on its own line — see HINT RULES below"\n    }`
     )
     .replace(
       important,
-      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" or "explanation" — only where the problem is, its type and your hint; the student must fix it themselves):
-1. Point to the kind of problem and the rule, or ask a guiding question. Do NOT give the answer: never write the corrected sentence, and never write any character or word that your correction adds or uses instead of the student's.
-2. You may quote the student's own words in Chinese characters.
-3. One sentence, in English, at the student's level.
+      `HINT RULES (this teacher chose "hints only": the student will NOT see "revised" or "explanation" — only the marked places, their type and your hint. The student must rewrite the sentence on their own, so the hint has to TEACH exactly what they need to fix it. A vague hint like "check the word choice" does not help):
+1. One point per problem, in the order the problems come in the sentence. Put each point on its own line (separate the lines with \\n). No numbers or bullets.
+2. Start each point with the student's own words that it is about, in Chinese (for something missing, say where: "Before 在: …"). Then be specific:
+   - Wrong word (two similar words): name the student's word AND the right word, and contrast them — what each one means or goes with — with a short phrase for each that is NOT from this sentence.
+   - Wrong character: name the right character and contrast it with the one written (its meaning, a common word with each).
+   - Grammar: name the exact pattern to use, written as a structure with placeholders, e.g. "不但 A，而且 B", "无论 A 还是 B，都……", "正在 + verb", "verb + 得 + description", and say in a few words what it does.
+   - Missing or extra word: say which word is missing or not needed, and the rule.
+   - Word order: give the right order as a structure with placeholders, e.g. "subject + time word + verb" — never filled in with words from this sentence.
+   - You may add a short example, but it must be a NEW phrase or sentence, not from this composition.
+   - If the right word or pattern is probably new to the student, give its pinyin and meaning in the hint (the student won't see the explanation).
+3. NEVER write the corrected sentence or any corrected part of it: do not put the right word or pattern together with the student's other words from this sentence. Putting them together is the student's job.
+4. Each point is 1–2 short sentences in plain English at the student's level. Write all Chinese in characters (pinyin may follow in parentheses).
 Examples (original → revised: hint):
-- 我们玩了很快乐 → 我们玩得很快乐: "Which 'de' joins a verb to a description of how the action went?"
-- 她的实习很快完了 → 她的实习很快就要结束了: "完 doesn't fit an internship coming to an end — which verb is used when a period of time or an event finishes?"
-- 我去了学校昨天 → 我昨天去了学校: "Where do time words go in a Chinese sentence?"
-- 我昨天去商店 → 我昨天去了商店: "This action is already finished — something is missing after the verb."
+- 他的汉语水平改善了很多 → 他的汉语水平提高了很多:
+  "改善 vs 提高: 改善 means to make a bad situation better (改善环境、改善关系); 提高 means to raise a level or an ability (提高成绩、提高能力)."
+- 我们要保护环竟 → 我们要保护环境:
+  "环竟: the 'jìng' in 'environment' is 境, with 土 (earth) on the left; 竟 means 'unexpectedly', as in 竟然."
+- 我们玩了很快乐 → 我们玩得很快乐:
+  "了: to describe how an action went, use verb + 得 + description (他跑得很快). 了 only says the action is finished."
+- 我去了学校昨天 → 我昨天去了学校:
+  "昨天: time words go before the verb in Chinese: subject + time word + verb (他明天来)."
+- 无论天气好或不好，他每天跑步 → 无论天气好不好，他每天都跑步:
+  "好或不好: after 无论, give the choices as a question — A 还是 B, or the positive and negative together (忙不忙、远不远) — not with 或.\\nBefore 跑步: 无论 needs 都 in the second part: 无论……，subject + 都 + verb."
 
-COMMENTS for this student: describe the kinds of problems and the rules, but never write corrected sentences or the right words.
+COMMENTS for this student: sum up the kinds of problems and the rules (the hints already give the details). Never write a corrected sentence or a corrected part of the composition, and don't word corrections as instructions like "change X to Y".
 
 ${important}`
     );

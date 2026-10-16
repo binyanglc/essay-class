@@ -12,6 +12,7 @@ import { HINT_KIND_LABELS, kindsOf, placeHints } from '@/lib/hints';
 import { placeRevisions } from '@/lib/track-changes';
 import { withRevisionIds } from '@/lib/revisions';
 import { HintSentence } from '@/components/HintsView';
+import HintText from '@/components/HintText';
 import { DiffOps, NumberBadge } from '@/components/TrackChangesView';
 import FeedbackWaiting from '@/components/FeedbackWaiting';
 
@@ -33,7 +34,7 @@ function FeedbackNotes({ text, fb }: { text: string; fb: StudentFeedback }) {
             <div className="mt-1">
               <HintSentence hint={h} />
             </div>
-            {h.hint && <p className="mt-1 text-gray-700">{h.hint}</p>}
+            {h.hint && <HintText hint={h.hint} className="mt-1 text-gray-700" />}
           </li>
         ))}
       </ol>

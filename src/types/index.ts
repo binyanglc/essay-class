@@ -140,7 +140,7 @@ export const FEEDBACK_STYLES: { value: FeedbackStyle; label: string; hint: strin
   {
     value: 'hints',
     label: 'Hints only',
-    hint: 'Students see where each problem is, what kind it is and a short hint — never the corrected sentence. They fix it themselves. You still see the full corrections.',
+    hint: 'Students see where each problem is and a hint that teaches the fix (the right pattern, or how two similar words differ) — never the corrected sentence. They rewrite it themselves. You still see the full corrections.',
   },
 ];
 

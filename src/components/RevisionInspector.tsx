@@ -11,6 +11,8 @@ import type { DraftLabels } from '@/lib/draft-labels';
 import { DiffOps, NumberBadge } from './TrackChangesView';
 import { LABELS_TIP, LabelChip, LabelEditor, LabelsTip, RemoveReasonPrompt, changesFromOps } from './LabelControls';
 import { useTipDismissed } from '@/lib/tips';
+import { MAX_HINT, hintPoints } from '@/lib/hints';
+import HintText from './HintText';
 import type { LabelSuggestion, TagChip } from './LabelControls';
 
 export type { LabelSuggestion, TagChip } from './LabelControls';
@@ -272,9 +274,9 @@ export default function RevisionInspector(props: Props) {
                 id={`${slot}-hint-${item.id}`}
                 value={editing.hint ?? ''}
                 onChange={(e) => props.onDraft({ ...editing, hint: e.target.value })}
-                rows={2}
-                maxLength={300}
-                placeholder="Optional — one sentence that points to the problem without giving the answer"
+                rows={Math.min(6, Math.max(2, hintPoints(editing.hint).length + 1))}
+                maxLength={MAX_HINT}
+                placeholder="Optional — one line per problem: the word, character or pattern to use (not the corrected sentence)"
                 className="mt-1 w-full resize-y rounded-md border border-blue-300 px-2.5 py-2 leading-relaxed outline-none focus:ring-2 focus:ring-blue-500"
               />
               {!editing.isNew &&
@@ -282,12 +284,12 @@ export default function RevisionInspector(props: Props) {
                 (editing.hint ?? '') === (editing.baseHint ?? '') &&
                 !!(editing.hint ?? '').trim() && (
                   <p className="mt-1 text-[11px] leading-snug text-amber-700">
-                    You changed the suggestion — check that the hint still fits and doesn&apos;t give the answer away.
+                    You changed the suggestion — check that the hint still fits and doesn&apos;t show the corrected sentence.
                   </p>
                 )}
               </>
             ) : item.hint ? (
-              <p className="mt-1 leading-relaxed text-gray-700">{item.hint}</p>
+              <HintText hint={item.hint} className="mt-1 leading-relaxed text-gray-700" />
             ) : (
               <p className="mt-1 text-xs leading-snug text-gray-400">
                 No hint — the student sees only where the problem is and its labels.

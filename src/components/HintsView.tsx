@@ -15,6 +15,7 @@ import { LabelChip } from './LabelControls';
 import { NumberBadge } from './TrackChangesView';
 import { CommentThread } from './FeedbackView';
 import CompositionPhoto from './CompositionPhoto';
+import HintText from './HintText';
 
 /** How each kind of mark looks, in the composition and in the legend. */
 const MARK_STYLE: Record<HintKind, string> = {
@@ -149,7 +150,8 @@ export default function HintsView({
       {ordered.length > 0 ? (
         <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2.5 text-sm leading-relaxed text-blue-900">
           {preview ? 'This is what the student sees.' : 'Your teacher wants you to fix these yourself.'} The marks show
-          where each problem is; the hints below say what kind of problem it is. Then rewrite your composition.
+          where each problem is; the hints below explain the word, character or pattern you need. Then rewrite the
+          sentences yourself.
         </p>
       ) : (
         <p className="mb-3 rounded-lg bg-green-50 px-3 py-2.5 text-sm text-green-800">Nothing to fix — well done!</p>
@@ -218,10 +220,10 @@ export default function HintsView({
                   <HintSentence hint={h} />
                 </div>
                 {h.hint && (
-                  <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 leading-relaxed text-gray-700">
-                    <span className="font-medium text-gray-900">Hint: </span>
-                    {h.hint}
-                  </p>
+                  <div className="mt-2 rounded-md bg-gray-50 px-3 py-2 leading-relaxed text-gray-700">
+                    <p className="font-medium text-gray-900">Hint</p>
+                    <HintText hint={h.hint} className="mt-0.5" />
+                  </div>
                 )}
                 {!preview && (
                   <div className="-ml-3">
