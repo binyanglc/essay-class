@@ -21,7 +21,7 @@
 import type { ErrorType } from '@/types';
 import { getGrammarPoint, grammarPointName } from './hsk-grammar';
 
-export const TAXONOMY_VERSION = 'v1-rc3';
+export const TAXONOMY_VERSION = 'v1-rc4'; // rc4 (2026-10-16): CHAR.OTHER
 
 export type Domain = 'CHAR' | 'VOC' | 'GRAM' | 'PUNC' | 'DISC' | 'REG' | 'EXPR';
 /** error = wrong; infelicity = acceptable but unnatural; variant = regional / script variant, not wrong. */
@@ -97,6 +97,16 @@ export const CODES: CodeInfo[] = [
     zh: '形近别字',
     definition: 'One character is replaced by another that looks similar.',
     examples: ['*己经 → 已经', '*末来 → 未来'],
+    item: 'pair',
+  },
+  {
+    code: 'CHAR.OTHER',
+    domain: 'CHAR',
+    en: 'Wrong character',
+    zh: '别字（音、形都不近）',
+    definition:
+      'One character is replaced by another that neither sounds nor looks like the right one, so what the student wrote is not the word (*段烟 → 戒烟). If the two sound or look alike, use CHAR.SOUND or CHAR.SHAPE.',
+    examples: ['*段烟 → 戒烟'],
     item: 'pair',
   },
   {

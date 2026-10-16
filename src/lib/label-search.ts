@@ -29,6 +29,7 @@ export interface LabelHit {
 const KEYWORDS: Record<string, string> = {
   'CHAR.SOUND': '别字 错别字 错字 同音 近音 typo homophone wrong character',
   'CHAR.SHAPE': '别字 错别字 错字 形近 typo look-alike wrong character',
+  'CHAR.OTHER': '别字 错别字 错字 写错字 typo wrong character',
   'CHAR.INWORD': '缺字 多字 字序 漏字 missing character extra character',
   'CHAR.PINYIN': '拼音 英文 pinyin english',
   'CHAR.SCRIPT': '繁体 简体 繁简 traditional simplified',

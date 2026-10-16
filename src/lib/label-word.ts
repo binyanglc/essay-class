@@ -2,7 +2,7 @@ import { diffChars } from './track-changes';
 import { isHskWord } from './hsk-words-2025';
 
 /** Labels that record one wrong character ("坏 ← 怀"). */
-const CHARACTER_CODES = new Set(['CHAR.SOUND', 'CHAR.SHAPE']);
+const CHARACTER_CODES = new Set(['CHAR.SOUND', 'CHAR.SHAPE', 'CHAR.OTHER']);
 
 /**
  * For a wrong-character label ("坏 ← 怀"), the word the right character is

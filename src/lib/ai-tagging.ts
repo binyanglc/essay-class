@@ -65,7 +65,7 @@ export const TAGGING_MODEL = 'gpt-6-luna';
 export const FALLBACK_TAGGING_MODEL = 'gpt-4o-mini';
 
 /** Labels for one wrong character. */
-const CHARACTER_CODES = new Set(['CHAR.SOUND', 'CHAR.SHAPE']);
+const CHARACTER_CODES = new Set(['CHAR.SOUND', 'CHAR.SHAPE', 'CHAR.OTHER']);
 
 export interface RevisionForTagging {
   id: string;
@@ -208,7 +208,7 @@ const EXAMPLES = `
 18. 我想了结中国文化。 → 我想了解中国文化。
    ⇒ "结" / "解" — 结 (jié) and 解 (jiě) sound alike; 了结 ("to settle") is a rare word the student didn't mean ⇒ CHAR.SOUND
 19. 他已经段烟了。 → 他已经戒烟了。
-   ⇒ "段" / "断" — the student meant 断烟 and wrote 段, which sounds the same (duàn) ⇒ CHAR.SOUND   (target_text "断", the character they meant)
+   ⇒ "段" / "戒" — 段烟 is not a word; 段 (duàn) neither sounds nor looks like 戒 (jiè) ⇒ CHAR.OTHER   (not VOC.CHOICE, not CHAR.INWORD)
 20. 吸烟也是一种权力。 → 吸烟也是一种权利。
    ⇒ "权力" / "权利" — two different words: 权力 power, 权利 a right ⇒ VOC.CHOICE   (not CHAR.SOUND)`;
 
@@ -239,7 +239,7 @@ MISUSE RULES (optional detail for some grammar codes — use one only when it cl
 ${rulesText()}
 
 HOW TO DECIDE
-1. A wrong character: quote only the wrong character and the right one ("些" / "此", not "因些" / "因此"). Check the pinyin: same or similar sound (在/再 zài, 做/作 zuò) → CHAR.SOUND; looks similar but sounds different (些 xiē / 此 cǐ, 己 jǐ / 已 yǐ) → CHAR.SHAPE. This holds even if the wrong character on its own is also a word (在/再, 做/作), or the student's two characters happen to make a rare word they can't have meant (了结 for 了解 → CHAR.SOUND). Exception: 的/地/得 → GRAM.DE. But when what the student wrote is a real word of two or more characters with another meaning, one a learner would use (权力 for 权利, 严厉 for 严格), it is a word problem → VOC.CHOICE: quote both whole words. When what the student wrote is no word at all and Corrected uses a different word, look for the character they meant: 段烟 → 戒烟 is 断烟 with 段 written for 断 (both duàn) → CHAR.SOUND, learner_text "段", target_text "断" (the character they meant, even though it is not in Corrected).
+1. A wrong character: quote only the wrong character and the right one ("些" / "此", not "因些" / "因此"). Check the pinyin: same or similar sound (在/再 zài, 做/作 zuò) → CHAR.SOUND; looks similar but sounds different (些 xiē / 此 cǐ, 己 jǐ / 已 yǐ) → CHAR.SHAPE; neither sounds nor looks alike (段 duàn / 戒 jiè in 段烟 → 戒烟) → CHAR.OTHER. This holds even if the wrong character on its own is also a word (在/再, 做/作), or the student's two characters happen to make a rare word they can't have meant (了结 for 了解 → CHAR.SOUND). Exception: 的/地/得 → GRAM.DE. But when what the student wrote is a real word of two or more characters with another meaning, one a learner would use (权力 for 权利, 严厉 for 严格), it is a word problem → VOC.CHOICE: quote both whole words. When what the student wrote is no word at all (段烟), it is a wrong character, not a word choice: quote the student's character and the one in Corrected (段 / 戒), and don't guess what else they might have meant.
 2. Adding or removing 了 is ALWAYS GRAM.LE (never GRAM.NEG or GRAM.CONSTIT). With 没 in the clause, the rule is R.LE.NEG.
 3. A character missing or extra in a word, or two characters in the wrong order (图馆 → 图书馆, 习学 → 学习): if what the student wrote is not a word → CHAR.INWORD; if it is another real word (兴趣 → 感兴趣) → a vocabulary or grammar code. A character written in place of another (段烟, 怀处) is rule 1, never CHAR.INWORD.
 4. If the fix introduces or removes a construction (把, 被, 是……的, 比), use that construction's code even if 了 etc. also changed.
@@ -262,7 +262,7 @@ ${EXAMPLES}
 FOR EACH LABEL, in this order
 - revision: the correction's number in brackets.
 - learner_text: the shortest part of "Student wrote" that is wrong (a character, word or particle), copied exactly; "" if something was missing.
-- target_text: what replaces it in "Corrected", copied exactly; "" if it was simply removed. (For a wrong character, the character the student meant when Corrected uses another word — rule 1.)
+- target_text: what replaces it in "Corrected", copied exactly; "" if it was simply removed.
 - problem: a few words on what exactly is wrong (e.g. "在 and 再 sound the same", "extra 了 after 没").
 - code: the label that matches the problem.
 - rule: a misuse rule id from the list for this code, or null.
@@ -491,11 +491,7 @@ export function checkLabels(
     let learner = clean(l.learner_text);
     let target = clean(l.target_text);
     if (learner && !containsLoosely(rev.original, learner)) learner = '';
-    // A wrong character may be labelled with the one the student meant, when the correction
-    // uses another word (段烟 → 戒烟: 段 written for 断) — the AI's call, kept
-    const meant =
-      CHARACTER_CODES.has(code.code) && [...learner].length === 1 && [...target].length === 1 && rev.original.includes(learner);
-    if (target && !meant && !containsLoosely(rev.revised, target)) target = '';
+    if (target && !containsLoosely(rev.revised, target)) target = '';
     if (!learner && !target && changes.length === 1) {
       learner = changes[0].learner.trim().slice(0, 40);
       target = changes[0].target.trim().slice(0, 40);
@@ -533,9 +529,9 @@ export function checkLabels(
       target = fixed.target;
     }
 
-    // Wrong character or wrong word, same-sounding or similar-looking: the AI decides (site owner,
-    // 2026-10-16: rules that second-guessed it made 了结 → 了解 a word choice). Only the quote is
-    // tidied: a wrong character is recorded as the two characters (此 ← 些, not 因此 ← 因些).
+    // Wrong character or wrong word, same-sounding, similar-looking or neither: the AI decides (site
+    // owner, 2026-10-16: rules that second-guessed it made 了结 → 了解 a word choice). Only the quote
+    // is tidied: a wrong character is recorded as the two characters (此 ← 些, not 因此 ← 因些).
     if (CHARACTER_CODES.has(code.code)) {
       const core = coreOf(learner, target);
       if (core.learner && core.target && core.learner.length === core.target.length) {
