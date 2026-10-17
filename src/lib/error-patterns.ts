@@ -54,17 +54,30 @@ export interface PatternSource {
   nextDraft?: number;
 }
 
-export interface QuizItem {
-  key: string;
-  /** The example sentence around the blank. */
-  before: string;
-  after: string;
-  answer: UsageEntry;
-  other: UsageEntry;
-  example: UsageEntry;
-  /** Show the wrong choice first (fixed per item, so it doesn't jump around). */
-  otherFirst: boolean;
-}
+/** A piece of an example sentence in a fill-in question: text, or a blank with its answer. */
+export type PracticePart = string | { blank: string };
+
+/**
+ * A practice question made from one usage & examples block (its example
+ * sentence), so every problem with an example gets one:
+ * - choice: the right word or the one it gets mixed up with, in a blank;
+ * - fill: type the right word (or the fixed words of a pattern) into the blanks;
+ * - translate: say the example in Chinese, then check.
+ */
+export type PracticeItem =
+  | {
+      type: 'choice';
+      key: string;
+      before: string;
+      after: string;
+      answer: UsageEntry;
+      other: UsageEntry;
+      example: UsageEntry;
+      /** Show the wrong choice first (fixed per item, so it doesn't jump around). */
+      otherFirst: boolean;
+    }
+  | { type: 'fill'; key: string; parts: PracticePart[]; answer: UsageEntry; example: UsageEntry }
+  | { type: 'translate'; key: string; answer: UsageEntry | null; example: UsageEntry };
 
 /** One of the student's sentences with problems of this kind. */
 export interface PatternSentence {
@@ -104,7 +117,7 @@ export interface PatternFamily {
   styleOnly: boolean;
   chips: PatternChip[];
   sentences: PatternSentence[];
-  quiz: QuizItem[];
+  practice: PracticeItem[];
   unchecked: number;
 }
 
@@ -127,32 +140,41 @@ export interface StudentPatterns {
 
 const clean = (s: string | null | undefined) => (s ?? '').trim();
 
-/** Whether a piece of text is about one of the student's words. */
+/**
+ * Whether a piece of text is about one of the student's words: it has the
+ * word, is part of it, or has two of its characters in a row (容易 for 容易地).
+ */
 function mentions(text: string, words: string[]): boolean {
-  return words.some((w) => text.includes(w) || (text.length > 0 && w.includes(text)));
+  return words.some((w) => {
+    if (text.includes(w) || (text.length > 0 && w.includes(text))) return true;
+    for (let i = 0; i + 2 <= w.length; i++) if (text.includes(w.slice(i, i + 2))) return true;
+    return false;
+  });
 }
 
-/** The usage & examples blocks about these words (all of them when none match or there are no words). */
+/**
+ * The usage & examples blocks about these words. Without words (labels from
+ * before migration v20) all of them; when no block is about the words, none —
+ * the sentence's other blocks are about other kinds of error.
+ */
 export function relevantUsage(usage: string, words: string[]): string {
   const text = clean(usage);
   if (!text || words.length === 0) return text;
   if (isUsage(text)) {
     const blocks = text.split(/\n\s*\n/).filter((b) => b.trim());
     const about = (b: string) => b.trim().split('\n')[0].replace(/[:：]\s*$/, '');
-    const keep = blocks.filter((b) => mentions(about(b), words));
-    return (keep.length ? keep : blocks).join('\n\n');
+    return blocks.filter((b) => mentions(about(b), words)).join('\n\n');
   }
-  const points = hintPoints(text);
-  const keep = points.filter((p) => mentions(p, words));
-  return (keep.length ? keep : points).join('\n');
+  return hintPoints(text)
+    .filter((p) => mentions(p, words))
+    .join('\n');
 }
 
-/** The points of an explanation about these words (all of them when none match). */
+/** The points of an explanation about these words (all of them without words, none when no point is about them). */
 export function relevantPoints(why: string, words: string[]): string[] {
   const points = hintPoints(why);
   if (words.length === 0) return points;
-  const keep = points.filter((p) => words.some((w) => p.includes(w)));
-  return keep.length ? keep : points;
+  return points.filter((p) => mentions(p, words));
 }
 
 /** Which marks belong to these labels: those on the student's words, else missing-word marks for missing words, else all. */
@@ -193,49 +215,87 @@ export function studentAbout(definition: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Quick check
+// Practice
 // ---------------------------------------------------------------------------
 
-const PLAIN_WORD = /^[㐀-鿿]{1,6}$/;
+const CJK_RUN = /[\u3400-\u9fff]+/g;
+const PLAIN_WORD = /^[\u3400-\u9fff]{1,6}$/;
 
-/** A fill-in-the-blank question from a usage block: its example with the right word taken out, against the word to compare. */
-export function quizFromBlock(b: UsageBlock): QuizItem | null {
-  if (!b.right || !b.compare || !b.example) return null;
-  const right = b.right.zh.trim();
-  const other = b.compare.zh.trim();
-  if (!PLAIN_WORD.test(right) || !PLAIN_WORD.test(other) || right === other || right.length !== other.length) return null;
-  const ex = b.example.zh;
-  const at = ex.indexOf(right);
-  if (at < 0) return null;
-  const key = `${right}|${ex}`;
-  let h = 0;
-  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return {
-    key,
-    before: ex.slice(0, at),
-    after: ex.slice(at + right.length),
-    answer: b.right,
-    other: b.compare,
-    example: b.example,
-    otherFirst: (h & 1) === 1,
-  };
+/** The fixed words of a word or pattern: "不但……而且……" → 不但, 而且; "正在 + verb" → 正在. */
+export function patternPieces(zh: string): string[] {
+  return zh.match(CJK_RUN) ?? [];
 }
 
-/** Up to `max` questions from these usage texts, one per word. */
-export function quizFrom(usages: string[], max = 3): QuizItem[] {
-  const out: QuizItem[] = [];
+/** The example with each piece taken out, in order; null if a piece isn't there. */
+function blanked(example: string, pieces: string[]): PracticePart[] | null {
+  const parts: PracticePart[] = [];
+  let at = 0;
+  for (const p of pieces) {
+    const i = example.indexOf(p, at);
+    if (i < 0) return null;
+    if (i > at) parts.push(example.slice(at, i));
+    parts.push({ blank: p });
+    at = i + p.length;
+  }
+  if (at < example.length) parts.push(example.slice(at));
+  return parts;
+}
+
+function hash(s: string): number {
+  let h = 0;
+  for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return h;
+}
+
+/** The practice question for a usage block: a choice when there is a word to compare, else fill in, else translate. */
+export function practiceFromBlock(b: UsageBlock): PracticeItem | null {
+  const ex = b.example;
+  if (!ex || !ex.zh.trim()) return null;
+  const key = `${b.right?.zh ?? ''}|${ex.zh}`;
+  if (b.right) {
+    const right = b.right.zh.trim();
+    const other = b.compare?.zh.trim() ?? '';
+    const at = ex.zh.indexOf(right);
+    if (b.compare && PLAIN_WORD.test(right) && PLAIN_WORD.test(other) && !right.includes(other) && !other.includes(right) && at >= 0) {
+      return {
+        type: 'choice',
+        key,
+        before: ex.zh.slice(0, at),
+        after: ex.zh.slice(at + right.length),
+        answer: b.right,
+        other: b.compare,
+        example: ex,
+        otherFirst: (hash(key) & 1) === 1,
+      };
+    }
+    const pieces = patternPieces(right);
+    const parts = pieces.length ? blanked(ex.zh, pieces) : null;
+    if (parts) return { type: 'fill', key, parts, answer: b.right, example: ex };
+  }
+  if (ex.en.trim()) return { type: 'translate', key, answer: b.right, example: ex };
+  return null;
+}
+
+/** One question per usage block with an example (the same example only once). */
+export function practiceFrom(usages: string[]): PracticeItem[] {
+  const out: PracticeItem[] = [];
   const seen = new Set<string>();
   for (const u of usages) {
     if (!isUsage(u)) continue;
     for (const b of usageBlocks(u)) {
-      const q = quizFromBlock(b);
-      if (!q || seen.has(q.answer.zh)) continue;
-      seen.add(q.answer.zh);
+      const q = practiceFromBlock(b);
+      if (!q || seen.has(q.example.zh)) continue;
+      seen.add(q.example.zh);
       out.push(q);
-      if (out.length >= max) return out;
     }
   }
   return out;
+}
+
+/** Whether a typed answer matches (spaces and punctuation don't count). */
+export function sameAnswer(typed: string, answer: string): boolean {
+  const norm = (x: string) => x.normalize('NFKC').replace(/[\s\p{P}]/gu, '');
+  return norm(typed) !== '' && norm(typed) === norm(answer);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,7 +401,7 @@ export function buildPatterns(tags: ErrorTag[], sources: Map<string, PatternSour
         styleOnly: f.tags.every((t) => t.nature === 'infelicity'),
         chips: [...chips.values()].sort((a, b) => b.count - a.count),
         sentences,
-        quiz: quizFrom(sentences.map((s) => s.usage)),
+        practice: practiceFrom(sentences.map((s) => s.usage)),
         unchecked: f.tags.filter(isUnconfirmedAi).length,
       });
     }

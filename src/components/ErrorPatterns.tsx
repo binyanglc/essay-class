@@ -6,7 +6,9 @@ import Link from 'next/link';
 import type { HintKind } from '@/types';
 import { diffChars } from '@/lib/track-changes';
 import type { DraftStatus } from '@/lib/drafts';
-import type { PatternFamily, PatternSentence, QuizItem } from '@/lib/error-patterns';
+import { sameAnswer } from '@/lib/error-patterns';
+import type { PatternFamily, PatternSentence, PracticeItem } from '@/lib/error-patterns';
+import type { UsageEntry } from '@/lib/hints';
 import { DiffOps } from './TrackChangesView';
 import HintText from './HintText';
 
@@ -140,8 +142,37 @@ function SentenceCard({ s }: { s: PatternSentence }) {
   );
 }
 
-/** One fill-in-the-blank question: the right word or the one it gets mixed up with. */
-function QuizQuestion({ q, n }: { q: QuizItem; n: number }) {
+/** A word with its pinyin and English. */
+function Word({ e }: { e: UsageEntry }) {
+  return (
+    <p className="text-gray-700">
+      <span lang="zh" className="font-medium text-gray-900">
+        {e.zh}
+      </span>
+      {e.pinyin && <span className="ml-1.5 text-gray-500">{e.pinyin}</span>}
+      {e.en && <span className="text-gray-500"> — {e.en}</span>}
+    </p>
+  );
+}
+
+/** The whole example sentence, with pinyin and English. */
+function ExampleLines({ e }: { e: UsageEntry }) {
+  return (
+    <div className="mt-1.5 border-l-2 border-gray-200 pl-2.5 text-[13px]">
+      <p lang="zh" className="text-gray-900">
+        {e.zh}
+      </p>
+      {e.pinyin && <p className="text-gray-500">{e.pinyin}</p>}
+      {e.en && <p className="italic text-gray-500">{e.en}</p>}
+    </div>
+  );
+}
+
+const ITEM = 'rounded-lg bg-white p-3 ring-1 ring-inset ring-gray-200';
+const SMALL_BUTTON = 'rounded-md px-3 py-1.5 text-sm ring-1 ring-inset ring-gray-300 bg-white text-gray-800 hover:bg-gray-50';
+
+/** Choose: the right word or the one it gets mixed up with. */
+function ChoiceQuestion({ q, n }: { q: Extract<PracticeItem, { type: 'choice' }>; n: number }) {
   const [picked, setPicked] = useState<'answer' | 'other' | null>(null);
   const options: { which: 'answer' | 'other'; zh: string }[] = [
     { which: 'answer', zh: q.answer.zh },
@@ -150,7 +181,7 @@ function QuizQuestion({ q, n }: { q: QuizItem; n: number }) {
   if (q.otherFirst) options.reverse();
   const done = picked !== null;
   return (
-    <li className="rounded-lg bg-white p-3 ring-1 ring-inset ring-gray-200">
+    <li className={ITEM}>
       <p className="text-[16px] leading-8 text-gray-900">
         <span className="mr-2 text-xs text-gray-400">{n}.</span>
         {q.before}
@@ -159,11 +190,11 @@ function QuizQuestion({ q, n }: { q: QuizItem; n: number }) {
             picked === 'answer' ? 'border-green-500 text-green-800' : picked === 'other' ? 'border-rose-400 text-rose-700' : 'border-gray-400'
           }`}
         >
-          {picked === 'answer' ? q.answer.zh : picked === 'other' ? q.other.zh : ' '}
+          {picked === 'answer' ? q.answer.zh : picked === 'other' ? q.other.zh : '\u00a0'}
         </span>
         {q.after}
       </p>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         {options.map((o) => {
           const right = o.which === 'answer';
           const cls = !done
@@ -196,44 +227,152 @@ function QuizQuestion({ q, n }: { q: QuizItem; n: number }) {
           <p className={picked === 'answer' ? 'font-medium text-green-700' : 'font-medium text-rose-700'}>
             {picked === 'answer' ? '✓ Right.' : `Not ${q.other.zh} here — it's ${q.answer.zh}.`}
           </p>
-          <p className="mt-1 text-gray-700">
-            <span lang="zh" className="font-medium text-gray-900">
-              {q.answer.zh}
-            </span>
-            {q.answer.pinyin && <span className="ml-1.5 text-gray-500">{q.answer.pinyin}</span>}
-            {q.answer.en && <span className="text-gray-500"> — {q.answer.en}</span>}
-          </p>
-          <p className="text-gray-700">
-            <span lang="zh" className="font-medium text-gray-900">
-              {q.other.zh}
-            </span>
-            {q.other.pinyin && <span className="ml-1.5 text-gray-500">{q.other.pinyin}</span>}
-            {q.other.en && <span className="text-gray-500"> — {q.other.en}</span>}
-          </p>
-          <div className="mt-1.5 border-l-2 border-gray-200 pl-2.5 text-[13px]">
-            <p lang="zh" className="text-gray-900">
-              {q.example.zh}
-            </p>
-            {q.example.pinyin && <p className="text-gray-500">{q.example.pinyin}</p>}
-            {q.example.en && <p className="italic text-gray-500">{q.example.en}</p>}
-          </div>
+          <Word e={q.answer} />
+          <Word e={q.other} />
+          <ExampleLines e={q.example} />
         </div>
       )}
     </li>
   );
 }
 
-export function QuickCheck({ items }: { items: QuizItem[] }) {
+/** Fill in: type the word (or the fixed words of a pattern) that goes in each blank. */
+function FillQuestion({ q, n }: { q: Extract<PracticeItem, { type: 'fill' }>; n: number }) {
+  const blanks = q.parts.filter((p): p is { blank: string } => typeof p !== 'string');
+  const [typed, setTyped] = useState<string[]>(() => blanks.map(() => ''));
+  const [checked, setChecked] = useState(false);
+  const [shown, setShown] = useState(false);
+  const right = blanks.map((b, i) => sameAnswer(typed[i], b.blank));
+  const allRight = right.every(Boolean);
+  let k = -1;
+  return (
+    <li className={ITEM}>
+      <p className="text-[16px] leading-10 text-gray-900">
+        <span className="mr-2 text-xs text-gray-400">{n}.</span>
+        {q.parts.map((p, i) => {
+          if (typeof p === 'string') return <span key={i}>{p}</span>;
+          k++;
+          const j = k;
+          const state = shown ? 'shown' : checked ? (right[j] ? 'right' : 'wrong') : 'open';
+          return (
+            <input
+              key={i}
+              lang="zh"
+              aria-label={`blank ${j + 1}`}
+              value={shown ? p.blank : typed[j]}
+              readOnly={shown}
+              onChange={(e) => {
+                const next = [...typed];
+                next[j] = e.target.value;
+                setTyped(next);
+                setChecked(false);
+              }}
+              style={{ width: `${Math.max(2, p.blank.length) * 1.15 + 1}em` }}
+              className={`mx-0.5 rounded border-b-2 bg-gray-50 px-1 text-center outline-none focus:bg-blue-50 ${
+                state === 'right' || state === 'shown'
+                  ? 'border-green-500 text-green-800'
+                  : state === 'wrong'
+                  ? 'border-rose-400 text-rose-700'
+                  : 'border-gray-400'
+              }`}
+            />
+          );
+        })}
+      </p>
+      {q.example.en && <p className="text-xs italic text-gray-500">{q.example.en}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {!shown && (
+          <button type="button" onClick={() => setChecked(true)} className={SMALL_BUTTON}>
+            Check
+          </button>
+        )}
+        {!shown && (
+          <button type="button" onClick={() => setShown(true)} className="text-xs text-gray-500 hover:text-gray-700">
+            Show answer
+          </button>
+        )}
+      </div>
+      {(shown || (checked && allRight)) && (
+        <div className="mt-2 text-sm">
+          {!shown && <p className="font-medium text-green-700">✓ Right.</p>}
+          <Word e={q.answer} />
+          <ExampleLines e={q.example} />
+        </div>
+      )}
+      {checked && !allRight && !shown && <p className="mt-2 text-sm font-medium text-rose-700">Not quite — try again, or show the answer.</p>}
+    </li>
+  );
+}
+
+/** Translate: say or write the example in Chinese, then compare. */
+function TranslateQuestion({ q, n }: { q: Extract<PracticeItem, { type: 'translate' }>; n: number }) {
+  const [text, setText] = useState('');
+  const [shown, setShown] = useState(false);
+  return (
+    <li className={ITEM}>
+      <p className="text-sm text-gray-900">
+        <span className="mr-2 text-xs text-gray-400">{n}.</span>
+        How would you say this in Chinese?
+        {q.answer && (
+          <>
+            {' '}
+            Use{' '}
+            <span lang="zh" className="font-medium">
+              {q.answer.zh}
+            </span>
+            .
+          </>
+        )}
+      </p>
+      <p className="mt-1 text-[15px] italic text-gray-700">{q.example.en}</p>
+      <textarea
+        lang="zh"
+        rows={1}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Write it here (optional)"
+        className="mt-2 w-full resize-none rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-[16px] outline-none focus:border-blue-300 focus:bg-white"
+      />
+      {!shown ? (
+        <button type="button" onClick={() => setShown(true)} className={`mt-1 ${SMALL_BUTTON}`}>
+          Show the Chinese
+        </button>
+      ) : (
+        <div className="mt-1 text-sm">
+          <ExampleLines e={q.example} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+const PRACTICE_SHOWN = 4;
+
+/** Practice for this kind of error: one question for each example in the usage & examples. */
+export function Practice({ items }: { items: PracticeItem[] }) {
+  const [all, setAll] = useState(false);
   if (items.length === 0) return null;
+  const shown = all ? items : items.slice(0, PRACTICE_SHOWN);
   return (
     <section className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-3 sm:p-4">
-      <h4 className="text-sm font-semibold text-blue-900">Quick check</h4>
-      <p className="mb-2 text-xs text-blue-800/80">Which word goes in the blank? These are new sentences, not yours.</p>
+      <h4 className="text-sm font-semibold text-blue-900">Practice</h4>
+      <p className="mb-2 text-xs text-blue-800/80">New sentences with the same words and patterns — try them before you look back up.</p>
       <ol className="space-y-2">
-        {items.map((q, i) => (
-          <QuizQuestion key={q.key} q={q} n={i + 1} />
-        ))}
+        {shown.map((q, i) =>
+          q.type === 'choice' ? (
+            <ChoiceQuestion key={q.key} q={q} n={i + 1} />
+          ) : q.type === 'fill' ? (
+            <FillQuestion key={q.key} q={q} n={i + 1} />
+          ) : (
+            <TranslateQuestion key={q.key} q={q} n={i + 1} />
+          )
+        )}
       </ol>
+      {items.length > PRACTICE_SHOWN && (
+        <button type="button" onClick={() => setAll(!all)} className="mt-2 text-xs font-medium text-blue-700 hover:underline">
+          {all ? 'Show fewer' : `${items.length - PRACTICE_SHOWN} more`}
+        </button>
+      )}
     </section>
   );
 }
@@ -315,7 +454,7 @@ export function PatternFamilyCard({
               {all ? 'Show fewer' : `Show ${f.sentences.length - SHOWN} more`}
             </button>
           )}
-          <QuickCheck items={f.quiz} />
+          <Practice items={f.practice} />
         </div>
       )}
     </div>
