@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isClassTeacher } from '@/lib/class-access';
 import { isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts, isStudentLevel } from '@/types';
 
 export async function PUT(
@@ -20,12 +21,7 @@ export async function PUT(
       .single();
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { data: cls } = await supabase
-      .from('classes')
-      .select('teacher_id')
-      .eq('id', project.class_id)
-      .single();
-    if (!cls || cls.teacher_id !== user.id) {
+    if (!(await isClassTeacher(supabase, project.class_id, user.id))) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
@@ -80,12 +76,7 @@ export async function DELETE(
       .single();
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { data: cls } = await supabase
-      .from('classes')
-      .select('teacher_id')
-      .eq('id', project.class_id)
-      .single();
-    if (!cls || cls.teacher_id !== user.id) {
+    if (!(await isClassTeacher(supabase, project.class_id, user.id))) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

@@ -42,9 +42,21 @@ export interface Profile {
 export interface Class {
   id: string;
   class_name: string;
+  /** The teacher who created the class (other teachers can be added, see ClassTeacher). */
   teacher_id: string;
   invite_code: string;
   created_at: string;
+}
+
+/** A teacher of a class (migration v21): its creator, or a teacher the creator added by email. */
+export interface ClassTeacher {
+  id: string;
+  name: string;
+  email: string;
+  /** The teacher who created the class: only they can delete it or change who teaches it. */
+  is_owner: boolean;
+  /** When the creator added them; null for the creator. */
+  added_at: string | null;
 }
 
 /** How strictly the AI corrects a composition (set per project by the teacher). */
@@ -250,6 +262,8 @@ export interface Feedback {
   repeated_error_summary: string;
   next_step_advice: string;
   teacher_edited_at: string | null;
+  /** The teacher who last saved changes (migration v21; set by the database); absent before v21. */
+  teacher_edited_by?: string | null;
   /** Level the AI used; null for older feedback (which only corrected a few key sentences). */
   correction_level?: CorrectionLevel | null;
   /** When the student could first see it; null = waiting for the teacher to release it (migration v14). */

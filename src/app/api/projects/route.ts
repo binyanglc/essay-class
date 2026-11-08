@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isClassTeacher } from '@/lib/class-access';
 import { DEFAULT_MAX_DRAFTS, isCorrectionLevel, isFeedbackRelease, isFeedbackStyle, isMaxDrafts, isStudentLevel } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -51,13 +52,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const { data: cls } = await supabase
-      .from('classes')
-      .select('teacher_id')
-      .eq('id', classId)
-      .single();
-
-    if (!cls || cls.teacher_id !== user.id) {
+    if (!(await isClassTeacher(supabase, classId, user.id))) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

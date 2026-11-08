@@ -7,6 +7,9 @@ import { Class } from '@/types';
 
 export default function TeacherDashboard() {
   const [classes, setClasses] = useState<Class[]>([]);
+  const [meId, setMeId] = useState<string | null>(null);
+  // Who created each class someone else added me to, by teacher id (migration v21)
+  const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
   const [newClassName, setNewClassName] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
@@ -22,14 +25,27 @@ export default function TeacherDashboard() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    setMeId(user.id);
 
-    const { data } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false });
+    // Classes I created, and classes another teacher added me to (migration v21;
+    // before it there is no class_teachers table and only my own classes show)
+    const { data: added } = await supabase.from('class_teachers').select('class_id').eq('teacher_id', user.id);
+    const addedIds = (added ?? []).map((r) => r.class_id as string);
+    let query = supabase.from('classes').select('*');
+    query = addedIds.length > 0
+      ? query.or(`teacher_id.eq.${user.id},id.in.(${addedIds.join(',')})`)
+      : query.eq('teacher_id', user.id);
+    const { data } = await query.order('created_at', { ascending: false });
+    const list = (data || []) as Class[];
+    setClasses(list);
 
-    setClasses(data || []);
+    const creatorIds = [...new Set(list.filter((c) => c.teacher_id !== user.id).map((c) => c.teacher_id))];
+    if (creatorIds.length > 0) {
+      const { data: creators } = await supabase.from('profiles').select('id, name, email').in('id', creatorIds);
+      setCreatorNames(
+        Object.fromEntries((creators ?? []).map((p) => [p.id as string, (p.name as string)?.trim() || (p.email as string) || '']))
+      );
+    }
   }
 
   const handleCreateClass = async () => {
@@ -92,6 +108,11 @@ export default function TeacherDashboard() {
                 <h3 className="font-semibold text-lg mb-2">
                   {cls.class_name}
                 </h3>
+                {meId && cls.teacher_id !== meId && (
+                  <p className="-mt-1 mb-2 text-xs text-gray-500">
+                    Co-teaching{creatorNames[cls.teacher_id] ? ` · created by ${creatorNames[cls.teacher_id]}` : ''}
+                  </p>
+                )}
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-sm text-gray-500">Invite code:</span>
                   <code className="bg-gray-100 px-3 py-1 rounded text-sm font-mono tracking-widest">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { classRole } from '@/lib/class-access';
 
 function generateInviteCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -10,18 +11,14 @@ function generateInviteCode(): string {
   return code;
 }
 
+/** The logged-in user and their role in the class (creator or added teacher), or null if they don't teach it. */
 async function verifyTeacher(supabase: Awaited<ReturnType<typeof createClient>>, classId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: cls } = await supabase
-    .from('classes')
-    .select('teacher_id')
-    .eq('id', classId)
-    .single();
-
-  if (!cls || cls.teacher_id !== user.id) return null;
-  return user;
+  const role = await classRole(supabase, classId, user.id);
+  if (!role) return null;
+  return { user, role };
 }
 
 export async function PUT(
@@ -106,8 +103,9 @@ export async function DELETE(
     const supabase = await createClient();
     const { id } = await params;
     const teacher = await verifyTeacher(supabase, id);
-    if (!teacher) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+    // Only the teacher who created the class can delete it (also enforced by RLS)
+    if (!teacher || teacher.role !== 'owner') {
+      return NextResponse.json({ error: 'Only the teacher who created this class can delete it' }, { status: 403 });
     }
 
     const { error } = await supabase

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isClassTeacher } from '@/lib/class-access';
 import { feedbackModel, generateFeedback } from '@/lib/ai-feedback';
 import { tagRevisions } from '@/lib/ai-tagging';
 import type { AiTagRow } from '@/lib/ai-tagging';
@@ -101,13 +102,12 @@ export async function POST(request: NextRequest) {
         ? imagePath
         : null;
 
-    // Only into a class the student has joined (or the class teacher trying it out)
-    const [{ data: membership }, { data: cls }] = await Promise.all([
+    // Only into a class the student has joined (or one of the class's teachers trying it out)
+    const [{ data: membership }, isTeacher] = await Promise.all([
       supabase.from('class_members').select('id').eq('class_id', classId).eq('student_id', user.id).limit(1),
-      supabase.from('classes').select('teacher_id').eq('id', classId).limit(1),
+      isClassTeacher(supabase, classId, user.id),
     ]);
     const isMember = Array.isArray(membership) && membership.length > 0;
-    const isTeacher = Array.isArray(cls) && cls[0]?.teacher_id === user.id;
     if (!isMember && !isTeacher) {
       return NextResponse.json({ error: 'You are not in this class' }, { status: 403 });
     }

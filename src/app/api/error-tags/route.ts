@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isClassTeacher } from '@/lib/class-access';
 import {
   TAXONOMY_VERSION,
   canonicalPatternName,
@@ -15,7 +16,7 @@ import { isGrammarPoint } from '@/lib/hsk-grammar';
 const text = (v: unknown, max = 2000) => (typeof v === 'string' ? v.slice(0, max) : '');
 const short = (v: unknown, max = 40) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
-/** A teacher adds an error label to a submission (RLS: only that class's teacher, migration v11). */
+/** A teacher adds an error label to a submission (RLS: only that class's teachers, migrations v11, v21). */
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -38,9 +39,10 @@ export async function POST(request: NextRequest) {
       .single();
     if (!submission) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    // Only the class teacher adds labels here (the AI's labels are saved with the submission)
-    const { data: cls } = await supabase.from('classes').select('teacher_id').eq('id', submission.class_id).single();
-    if (cls?.teacher_id !== user.id) return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
+    // Only the class's teachers add labels here (the AI's labels are saved with the submission)
+    if (!(await isClassTeacher(supabase, submission.class_id, user.id))) {
+      return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
+    }
 
     const label = {
       code,

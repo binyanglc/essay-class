@@ -11,6 +11,7 @@ import FeedbackReleaseSelect from '@/components/FeedbackReleaseSelect';
 import FeedbackStyleSelect from '@/components/FeedbackStyleSelect';
 import DraftsSelect from '@/components/DraftsSelect';
 import StudentLevelSelect from '@/components/StudentLevelSelect';
+import ClassTeachers from '@/components/ClassTeachers';
 
 /** The level set on the newest assignment that has one (projects come newest first). */
 function latestStudentLevel(projects: Project[]): StudentLevel | null {
@@ -45,6 +46,8 @@ export default function ClassDetailPage() {
   const [studentNameDraft, setStudentNameDraft] = useState('');
 
   const [loading, setLoading] = useState(true);
+  // The class can have several teachers (migration v21): only its creator deletes it
+  const [meId, setMeId] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -53,6 +56,8 @@ export default function ClassDetailPage() {
   }, [id]);
 
   async function loadAll() {
+    const { data: { user } } = await supabase.auth.getUser();
+    setMeId(user?.id ?? null);
     const { data: classData } = await supabase
       .from('classes')
       .select('*')
@@ -251,14 +256,16 @@ export default function ClassDetailPage() {
           </button>
         </div>
 
-        <div className="mt-3">
-          <button
-            onClick={handleDeleteClass}
-            className="text-xs text-red-400 hover:text-red-600"
-          >
-            Delete this class
-          </button>
-        </div>
+        {cls.teacher_id === meId && (
+          <div className="mt-3">
+            <button
+              onClick={handleDeleteClass}
+              className="text-xs text-red-400 hover:text-red-600"
+            >
+              Delete this class
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Projects */}
@@ -455,6 +462,9 @@ export default function ClassDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Teachers (migration v21) */}
+      <ClassTeachers classId={String(id)} onLeft={() => router.push('/teacher/dashboard')} />
     </div>
   );
 }

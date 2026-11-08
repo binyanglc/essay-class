@@ -70,6 +70,11 @@ export default function ProjectDetailPage() {
   const [tagEdits, setTagEdits] = useState<TagEdits | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Another teacher of the class saved this feedback while it was open here (migration v21)
+  const [saveConflict, setSaveConflict] = useState<{ by: string; at: string | null } | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
+  // Names of the teachers who last saved each feedback (teacher_edited_by), by id
+  const [editorNames, setEditorNames] = useState<Record<string, string>>({});
   const [labelSuggestions, setLabelSuggestions] = useState<LabelSuggestion[]>([]);
   const [issues, setIssues] = useState<IssueGroup[]>([]);
   const [issueCount, setIssueCount] = useState(0);
@@ -142,7 +147,26 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [includeStyle, issuesDraft]);
 
+  // The name of the teacher who last saved the open feedback (migration v21)
+  const editorId = selectedFeedback?.teacher_edited_by ?? null;
+  useEffect(() => {
+    if (!editorId || editorId === meId || editorNames[editorId]) return;
+    supabase
+      .from('profiles')
+      .select('name, email')
+      .eq('id', editorId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const name = data?.name?.trim() || data?.email;
+        if (name) setEditorNames((prev) => ({ ...prev, [editorId]: name }));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorId, meId]);
+  const editorLabel = (id: string | null | undefined) =>
+    !id ? 'teacher' : id === meId ? 'you' : editorNames[id] ?? 'another teacher';
+
   async function loadData() {
+    supabase.auth.getUser().then(({ data }) => setMeId(data.user?.id ?? null));
     const { data: proj } = await supabase
       .from('projects')
       .select('*')
@@ -263,9 +287,12 @@ export default function ProjectDetailPage() {
   const [selectedComments, setSelectedComments] = useState<FeedbackComment[]>([]);
   const latestSelection = useRef<string | null>(null);
 
-  const handleSelectSubmission = async (sub: Submission) => {
-    if (sub.id === selectedSub?.id) return;
-    if (hasEdits && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
+  /** Opens a submission; `reload` opens the open one again from what is saved (discarding unsaved edits). */
+  const handleSelectSubmission = async (sub: Submission, { reload = false }: { reload?: boolean } = {}) => {
+    if (!reload) {
+      if (sub.id === selectedSub?.id) return;
+      if (hasEdits && !confirm('You have unsaved changes to this feedback. Discard them?')) return;
+    }
 
     latestSelection.current = sub.id;
     setSelectedSub(sub);
@@ -276,6 +303,7 @@ export default function ProjectDetailPage() {
     setEditingRevisions(null);
     setTagEdits(null);
     setSaveError(null);
+    setSaveConflict(null);
     setStudentPreview(null);
     setPrevDraft(null);
     setShowDraftChanges(false);
@@ -476,7 +504,11 @@ export default function ProjectDetailPage() {
   };
 
   /** Saves the teacher's changes; returns whether everything was saved. */
-  const handleSaveEdits = async (): Promise<boolean> => {
+  /**
+   * Saves the open feedback. If another teacher saved it since it was opened, nothing is
+   * saved and the teacher chooses: load their version, or `overwrite` it with this one.
+   */
+  const handleSaveEdits = async (overwrite: unknown = false): Promise<boolean> => {
     if (!selectedFeedback || !selectedSub) return false;
     const hasTextEdits = Object.keys(editing).length > 0;
     const hasRevisionEdits = editingRevisions !== null;
@@ -486,17 +518,34 @@ export default function ProjectDetailPage() {
     const subId = selectedSub.id;
     setSaving(true);
     setSaveError(null);
+    setSaveConflict(null);
 
     if (hasTextEdits || hasRevisionEdits) {
       const body: Record<string, unknown> = { ...editing };
       if (hasRevisionEdits) {
         body.sentence_revisions = editingRevisions;
       }
+      // The version this teacher has open: the save is refused if another teacher saved since
+      body.expected_edited_at = selectedFeedback.teacher_edited_at ?? null;
+      // onClick passes the click event: only an explicit `true` replaces the other teacher's version
+      if (overwrite === true) body.overwrite = true;
       const res = await fetch(`/api/feedback/${selectedFeedback.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }).catch(() => null);
+      if (res?.status === 409) {
+        const info = await res.json().catch(() => null);
+        const by = info?.edited_by;
+        if (latestSelection.current === subId) {
+          setSaveConflict({
+            by: by?.is_me ? 'You (in another tab or window)' : by?.name || 'Someone',
+            at: typeof info?.edited_at === 'string' ? info.edited_at : null,
+          });
+        }
+        setSaving(false);
+        return false;
+      }
       if (!res?.ok) {
         setSaveError('Could not save your changes. Please try again.');
         setSaving(false);
@@ -941,6 +990,34 @@ export default function ProjectDetailPage() {
                   {saveError}
                 </p>
               )}
+              {saveConflict && (
+                <div role="alert" className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                  <p>
+                    <span className="font-semibold">{saveConflict.by}</span> saved changes to this composition
+                    {saveConflict.at
+                      ? ` at ${new Date(saveConflict.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                      : ''}{' '}
+                    while you had it open, so your changes were not saved.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => selectedSub && handleSelectSubmission(selectedSub, { reload: true })}
+                      disabled={saving}
+                      className="rounded-md border border-amber-400 bg-white px-3 py-1 text-sm hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      Load their version
+                    </button>
+                    <button
+                      onClick={() => handleSaveEdits(true)}
+                      disabled={saving}
+                      className="rounded-md px-3 py-1 text-sm text-amber-900 underline hover:text-amber-700 disabled:opacity-50"
+                    >
+                      Save mine instead (replaces theirs)
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-amber-800">Loading their version discards the changes you haven&apos;t saved.</p>
+                </div>
+              )}
               {releaseError && (
                 <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                   {releaseError}
@@ -1047,7 +1124,7 @@ export default function ProjectDetailPage() {
                 <div>
                   {selectedFeedback.teacher_edited_at && (
                     <p className="text-xs text-blue-600 mb-3">
-                      Reviewed by teacher &middot;{' '}
+                      Reviewed by {editorLabel(selectedFeedback.teacher_edited_by)} &middot;{' '}
                       {new Date(selectedFeedback.teacher_edited_at).toLocaleDateString('en-US')}
                     </p>
                   )}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isClassTeacher } from '@/lib/class-access';
 
 export async function DELETE(
   request: NextRequest,
@@ -19,12 +20,7 @@ export async function DELETE(
       .single();
     if (!sub) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { data: cls } = await supabase
-      .from('classes')
-      .select('teacher_id')
-      .eq('id', sub.class_id)
-      .single();
-    if (!cls || cls.teacher_id !== user.id) {
+    if (!(await isClassTeacher(supabase, sub.class_id, user.id))) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
